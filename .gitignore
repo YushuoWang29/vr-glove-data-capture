@@ -1,0 +1,54 @@
+# External SDKs, standalone vendor copies, and archives
+/Hi5 2.0 SDK for SteamVR Headset/
+/steamvr_unity_plugin-master/
+/*.zip
+/*.7z
+/*.rar
+
+# Unity-generated directories (the Unity project is nested in this repository)
+**/[Ll]ibrary/
+**/[Tt]emp/
+**/[Oo]bj/
+**/[Bb]uild/
+**/[Bb]uilds/
+**/[Ll]ogs/
+**/[Uu]ser[Ss]ettings/
+**/[Mm]emoryCaptures/
+**/[Rr]ecordings/
+
+# Unity-generated project and IDE files
+*.csproj
+*.unityproj
+*.sln
+*.suo
+*.tmp
+*.user
+*.userprefs
+*.pidb
+*.booproj
+*.svd
+*.pdb
+*.mdb
+*.opendb
+*.VC.db
+
+# IDE and editor state
+.vs/
+.idea/
+.vscode/
+*.code-workspace
+
+# Crash reports and diagnostics
+sysinfo.txt
+crashlytics-build.properties
+
+# Operating-system files
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# Research data: keep raw captures outside Git
+/data/raw/
+/datasets/
+/captures/
+/recordings/
