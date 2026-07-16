@@ -75,15 +75,24 @@ namespace VRGloveDataCapture.MixedReality
             get { return status; }
         }
 
+        public bool HasLiveFrames
+        {
+            get { return state == PassthroughState.Streaming; }
+        }
+
+        public uint LastFrameId
+        {
+            get { return lastFrameId; }
+        }
+
         private void Awake()
         {
             targetCamera = GetComponent<Camera>();
             Shader shader = Shader.Find("Hidden/VRGloveDataCapture/PassthroughComposite");
             if (shader == null)
             {
-                state = PassthroughState.Error;
-                status = "Passthrough composite shader was not found.";
-                Debug.LogError("[VRGloveDataCapture] " + status, this);
+                SetState(PassthroughState.Error,
+                    "Passthrough composite shader was not found.");
                 return;
             }
 
@@ -132,8 +141,8 @@ namespace VRGloveDataCapture.MixedReality
             Texture2D texture = videoSource.texture;
             if (texture == null)
             {
-                state = PassthroughState.WaitingForFrame;
-                status = "Camera service is active, waiting for the first frame.";
+                SetState(PassthroughState.WaitingForFrame,
+                    "Camera service is active, waiting for the first frame.");
                 return;
             }
 
@@ -147,13 +156,14 @@ namespace VRGloveDataCapture.MixedReality
             {
                 lastFrameId = frameId;
                 lastFrameTime = Time.unscaledTime;
-                state = PassthroughState.Streaming;
-                status = "VIVE tracked-camera frames are being composited.";
+                SetState(PassthroughState.Streaming,
+                    "LIVE: VIVE tracked-camera frames are being composited (" +
+                    texture.width + "x" + texture.height + ").");
             }
             else if (Time.unscaledTime - lastFrameTime > stalledFrameSeconds)
             {
-                state = PassthroughState.FrameStalled;
-                status = "The tracked-camera stream is available but frames have stalled.";
+                SetState(PassthroughState.FrameStalled,
+                    "The tracked-camera stream is available but frames have stalled.");
             }
         }
 
@@ -173,29 +183,28 @@ namespace VRGloveDataCapture.MixedReality
             {
                 ReleaseStream();
                 RestoreCamera();
-                state = PassthroughState.Disabled;
-                status = "Passthrough is disabled.";
+                SetState(PassthroughState.Disabled, "Passthrough is disabled.");
                 return;
             }
 
-            state = PassthroughState.WaitingForSteamVr;
-            status = "Waiting for SteamVR and the OpenVR tracked-camera service.";
+            SetState(PassthroughState.WaitingForSteamVr,
+                "Waiting for SteamVR and the OpenVR tracked-camera service.");
         }
 
         private bool TryAcquireStream()
         {
             if (SteamVR.instance == null || OpenVR.TrackedCamera == null)
             {
-                state = PassthroughState.WaitingForSteamVr;
-                status = "SteamVR/OpenVR tracked-camera service is not ready.";
+                SetState(PassthroughState.WaitingForSteamVr,
+                    "SteamVR/OpenVR tracked-camera service is not ready.");
                 return false;
             }
 
             videoSource = SteamVR_TrackedCamera.Source(undistorted);
             if (!videoSource.hasCamera)
             {
-                state = PassthroughState.CameraUnavailable;
-                status = "The HMD camera is unavailable. Enable Camera in SteamVR and restart SteamVR.";
+                SetState(PassthroughState.CameraUnavailable,
+                    "The HMD camera is unavailable. Enable Camera in SteamVR and restart SteamVR.");
                 return false;
             }
 
@@ -203,9 +212,35 @@ namespace VRGloveDataCapture.MixedReality
             acquired = true;
             lastFrameId = 0;
             lastFrameTime = Time.unscaledTime;
-            state = PassthroughState.WaitingForFrame;
-            status = "Tracked-camera service acquired; waiting for video.";
+            SetState(PassthroughState.WaitingForFrame,
+                "Tracked-camera service acquired; waiting for video.");
             return true;
+        }
+
+        private void SetState(PassthroughState nextState, string nextStatus)
+        {
+            if (state == nextState && status == nextStatus)
+            {
+                return;
+            }
+
+            state = nextState;
+            status = nextStatus;
+            string message = "[VRGloveDataCapture] Passthrough " + state + ": " + status;
+
+            if (state == PassthroughState.Error)
+            {
+                Debug.LogError(message, this);
+            }
+            else if (state == PassthroughState.CameraUnavailable ||
+                     state == PassthroughState.FrameStalled)
+            {
+                Debug.LogWarning(message, this);
+            }
+            else
+            {
+                Debug.Log(message, this);
+            }
         }
 
         private void ReleaseStream()

@@ -55,9 +55,13 @@ Shader "Hidden/VRGloveDataCapture/PassthroughComposite"
                 float rawDepth = SAMPLE_DEPTH_TEXTURE(_CameraDepthTexture, input.uv);
                 float linearDepth = Linear01Depth(rawDepth);
                 float geometryCoverage = 1.0 - step(0.9999, linearDepth);
-                float sceneCoverage = max(geometryCoverage, saturate(virtualScene.a));
 
-                fixed3 mixedReality = lerp(realWorld.rgb, virtualScene.rgb, sceneCoverage);
+                // XR render targets frequently expose an opaque alpha channel even
+                // when the camera background alpha is zero. Using source alpha as
+                // coverage would therefore hide the tracked-camera image entirely.
+                // The depth buffer is the reliable signal: far-plane pixels show
+                // the real world, while rendered Unity geometry stays in front.
+                fixed3 mixedReality = lerp(realWorld.rgb, virtualScene.rgb, geometryCoverage);
                 fixed3 result = lerp(virtualScene.rgb, mixedReality, saturate(_Opacity));
                 return fixed4(result, 1.0);
             }

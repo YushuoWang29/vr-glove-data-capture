@@ -18,8 +18,9 @@
 - **Hi5 手指外展/内收解锁**：运行时自动关闭厂商 SDK 的 `finger ADB fixed` 模式，不修改本地厂商源码。
 - **可选 PIP–DIP 耦合**：在 `LateUpdate` 中按比例约束 DIP 屈伸，同时保留原有外展/内收和非屈伸旋转。
 - **VIVE Pro 2 视频透视**：使用 OpenVR Tracked Camera 将真实世界视频合成到虚拟物体之后；Play Mode 中按 `P` 开关。
+- **VR 第一视角 MP4 录像**：Unity Editor Play Mode 中按 `F9` 开始/停止录制 Game View（头显桌面镜像），视频写入本地 `Recordings/`。
 
-设计、配置和验证方法见 [手指运动学文档](docs/FINGER_KINEMATICS.md) 与 [混合现实透视文档](docs/MIXED_REALITY.md)。
+设计、配置和验证方法见 [手指运动学文档](docs/FINGER_KINEMATICS.md)、[混合现实透视文档](docs/MIXED_REALITY.md) 与 [VR 视角录像文档](docs/VR_VIEW_RECORDING.md)。
 
 ## 仓库结构
 

@@ -34,9 +34,10 @@
 2. Console 出现 `Hi5 finger abduction/adduction is enabled` 后，先张开手掌，再分别完成拇指–食指与拇指–小指对指。
 3. 若需要强制 PIP–DIP 生理耦合，将 `FingerJointCoupling` 添加到左右 `Noitom_*Hand` 骨骼根节点；保持手掌自然伸直并执行组件菜单 `Capture current pose as coupling neutral`。
 4. 在 SteamVR 的 `Settings > Camera` 中启用 VIVE Pro 2 双摄像头并重启 SteamVR。
-5. 回到 Play Mode，按键盘 `P` 启用或关闭视频透视。
+5. 回到 Play Mode，按键盘 `P` 启用视频透视；以 Console 出现 `Passthrough Streaming: LIVE` 作为软件确实收到连续相机帧的判据。
+6. 在 Game View 聚焦时按 `F9` 开始 VR 第一视角录像，再按 `F9` 停止；MP4 输出到 Unity 项目根目录的 `Recordings/`。
 
-详见 [FINGER_KINEMATICS.md](FINGER_KINEMATICS.md) 与 [MIXED_REALITY.md](MIXED_REALITY.md)。
+详见 [FINGER_KINEMATICS.md](FINGER_KINEMATICS.md)、[MIXED_REALITY.md](MIXED_REALITY.md) 与 [VR_VIEW_RECORDING.md](VR_VIEW_RECORDING.md)。
 
 ## 已验证状态
 
@@ -47,4 +48,6 @@
 - `Assembly-CSharp-Editor`/Burst 解析失败通常说明 Unity 版本或 SDK 编译链不匹配；本项目固定使用 Unity 2019.4.18f1。
 - Tracker 已在 SteamVR 中上线但手的位置错误时，应先重新运行厂商 V-pose 校准，而不是修改模型骨骼。
 - 透视功能依赖 SteamVR 相机权限、VIVE Pro 2 前置摄像头和 OpenVR Tracked Camera 接口，不能由 Hi5 SDK 替代。
+- `Passthrough is ready` 只表示组件已装到相机；只有 `Passthrough Streaming: LIVE` 才表示 OpenVR 已返回连续相机帧。
+- VR 录像基于 Unity Recorder `2.2.0-preview.4`，仅在 Unity Editor Play Mode 工作，不属于 Windows Player 运行时录像功能。
 - 手指增强是厂商解算后的约束后处理；它不能从不可观测数据中恢复每个关节的独立真实角度。
