@@ -1,0 +1,30 @@
+YCB OBJECT AND MODEL SET — DATASET LICENSE NOTICE
+
+The YCB Object and Model Set dataset is licensed under the
+Creative Commons Attribution 4.0 International Public License (CC BY 4.0).
+
+Canonical license:
+https://creativecommons.org/licenses/by/4.0/
+
+Legal code:
+https://creativecommons.org/licenses/by/4.0/legalcode.en
+
+Dataset source:
+https://ycb-benchmarks.s3-website-us-east-1.amazonaws.com/
+
+Dataset authors:
+Berk Calli, Arjun Singh, Aaron Walsman, Siddhartha Srinivasa,
+Pieter Abbeel, and Aaron M. Dollar.
+
+Included subset:
+- 005_tomato_soup_can, Google 16k textured mesh
+- 025_mug, Google 16k textured mesh
+- 055_baseball, Google 16k textured mesh
+
+Changes made by this project:
+- archives were reduced to the Unity-required OBJ, MTL, and texture files;
+- models are normalized to their intended approximate physical size at runtime;
+- simplified Unity collision primitives and task placement metadata are added;
+- the original mesh geometry and texture images are otherwise retained.
+
+This notice is informational and does not replace the license legal code.

@@ -19,8 +19,9 @@
 - **可选 PIP–DIP 耦合**：在 `LateUpdate` 中按比例约束 DIP 屈伸，同时保留原有外展/内收和非屈伸旋转。
 - **VIVE Pro 2 视频透视**：使用 OpenVR Tracked Camera 将真实世界视频合成到虚拟物体之后；Play Mode 中按 `P` 开关。
 - **VR 第一视角 MP4 录像**：Unity Editor Play Mode 中按 `F9` 开始/停止录制 Game View（头显桌面镜像），视频写入本地 `Recordings/`。
+- **机器人抓取任务台**：在 Hi5 `TableScene_Vive` 中自动生成球入桶、杯放定位垫、罐入箱和红蓝方块分类任务，并接入场景原有的实体复位按钮。
 
-设计、配置和验证方法见 [手指运动学文档](docs/FINGER_KINEMATICS.md)、[混合现实透视文档](docs/MIXED_REALITY.md) 与 [VR 视角录像文档](docs/VR_VIEW_RECORDING.md)。
+设计、配置和验证方法见 [手指运动学文档](docs/FINGER_KINEMATICS.md)、[混合现实透视文档](docs/MIXED_REALITY.md)、[VR 视角录像文档](docs/VR_VIEW_RECORDING.md) 与 [机器人抓取任务文档](docs/PICK_PLACE_TASKS.md)。
 
 ## 仓库结构
 

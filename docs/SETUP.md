@@ -36,8 +36,9 @@
 4. 在 SteamVR 的 `Settings > Camera` 中启用 VIVE Pro 2 双摄像头并重启 SteamVR。
 5. 回到 Play Mode，按键盘 `P` 启用视频透视；以 Console 出现 `Passthrough Streaming: LIVE` 作为软件确实收到连续相机帧的判据。
 6. 在 Game View 聚焦时按 `F9` 开始 VR 第一视角录像，再按 `F9` 停止；MP4 输出到 Unity 项目根目录的 `Recordings/`。
+7. 打开 `Assets/Hi5_Interaction_SDK/Scenes/Vive/TableScene_Vive.unity` 并进入 Play Mode；项目会自动在原有桌面附近生成 4 组机器人抓取任务。完成任意任务后，拍下场景原有复位按钮，确认全部新增物体及目标状态一并恢复；`F8` 是同一复位消息的键盘备用入口。
 
-详见 [FINGER_KINEMATICS.md](FINGER_KINEMATICS.md)、[MIXED_REALITY.md](MIXED_REALITY.md) 与 [VR_VIEW_RECORDING.md](VR_VIEW_RECORDING.md)。
+详见 [FINGER_KINEMATICS.md](FINGER_KINEMATICS.md)、[MIXED_REALITY.md](MIXED_REALITY.md)、[VR_VIEW_RECORDING.md](VR_VIEW_RECORDING.md) 与 [PICK_PLACE_TASKS.md](PICK_PLACE_TASKS.md)。
 
 ## 已验证状态
 
