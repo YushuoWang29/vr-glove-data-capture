@@ -5,6 +5,15 @@
 /*.7z
 /*.rar
 
+# Proprietary Hi5 SDK imports: install locally after cloning
+/Unity Project/vr-glove-data-capture/Assets/NoitomHi5/
+/Unity Project/vr-glove-data-capture/Assets/NoitomHi5.meta
+/Unity Project/vr-glove-data-capture/Assets/Hi5_Interaction_SDK/
+/Unity Project/vr-glove-data-capture/Assets/Hi5_Interaction_SDK.meta
+
+# SteamVR writes a machine-local absolute action-manifest path here
+**/unityProject.vrmanifest
+
 # Unity-generated directories (the Unity project is nested in this repository)
 **/[Ll]ibrary/
 **/[Tt]emp/
