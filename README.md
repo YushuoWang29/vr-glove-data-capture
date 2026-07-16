@@ -13,6 +13,14 @@
 
 厂商标定与交互示例已在上述物理硬件上验证。仓库中的原创代码用于增加约束手指运动学、前置摄像头透视实验、数据采集和运行时诊断。
 
+## 已实现的扩展
+
+- **Hi5 手指外展/内收解锁**：运行时自动关闭厂商 SDK 的 `finger ADB fixed` 模式，不修改本地厂商源码。
+- **可选 PIP–DIP 耦合**：在 `LateUpdate` 中按比例约束 DIP 屈伸，同时保留原有外展/内收和非屈伸旋转。
+- **VIVE Pro 2 视频透视**：使用 OpenVR Tracked Camera 将真实世界视频合成到虚拟物体之后；Play Mode 中按 `P` 开关。
+
+设计、配置和验证方法见 [手指运动学文档](docs/FINGER_KINEMATICS.md) 与 [混合现实透视文档](docs/MIXED_REALITY.md)。
+
 ## 仓库结构
 
 ```text

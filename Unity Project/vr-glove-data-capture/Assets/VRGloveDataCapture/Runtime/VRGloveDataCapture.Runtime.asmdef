@@ -1,0 +1,21 @@
+{
+  "name": "VRGloveDataCapture.Runtime",
+  "rootNamespace": "VRGloveDataCapture",
+  "references": [
+    "SteamVR",
+    "Unity.XR.OpenVR"
+  ],
+  "includePlatforms": [
+    "Editor",
+    "WindowsStandalone32",
+    "WindowsStandalone64"
+  ],
+  "excludePlatforms": [],
+  "allowUnsafeCode": false,
+  "overrideReferences": false,
+  "precompiledReferences": [],
+  "autoReferenced": true,
+  "defineConstraints": [],
+  "versionDefines": [],
+  "noEngineReferences": false
+}

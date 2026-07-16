@@ -28,6 +28,16 @@
 5. 完成校准后加载 Hi5 Interaction SDK 示例场景，验证左右手位置、姿态、抓取和碰撞。
 6. 在此基线上启用 `VRGloveDataCapture` 组件；功能配置见对应设计文档。
 
+## 扩展功能快速验证
+
+1. 进入任一 Hi5 校准完成后的交互场景。
+2. Console 出现 `Hi5 finger abduction/adduction is enabled` 后，先张开手掌，再分别完成拇指–食指与拇指–小指对指。
+3. 若需要强制 PIP–DIP 生理耦合，将 `FingerJointCoupling` 添加到左右 `Noitom_*Hand` 骨骼根节点；保持手掌自然伸直并执行组件菜单 `Capture current pose as coupling neutral`。
+4. 在 SteamVR 的 `Settings > Camera` 中启用 VIVE Pro 2 双摄像头并重启 SteamVR。
+5. 回到 Play Mode，按键盘 `P` 启用或关闭视频透视。
+
+详见 [FINGER_KINEMATICS.md](FINGER_KINEMATICS.md) 与 [MIXED_REALITY.md](MIXED_REALITY.md)。
+
 ## 已验证状态
 
 已在实际硬件上完成以下闭环：SteamVR 设备上线、Unity 示例场景运行、头显显示、注视触发校准、虚拟手驱动及与虚拟物品交互。
