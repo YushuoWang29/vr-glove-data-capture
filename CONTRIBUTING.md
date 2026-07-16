@@ -3,9 +3,7 @@
 ## Branches
 
 - `main`: the reviewed, reproducible project baseline.
-- `feature/<name>`: new capture, calibration, synchronization, or export work.
-- `fix/<name>`: bug fixes.
-- `docs/<name>`: documentation-only changes.
+- `codex/<topic>`: short-lived feature, fix, or documentation work.
 - `release/vX.Y.Z`: optional stabilization branches for tagged releases.
 
 Keep branches short-lived and merge them into `main` through pull requests. Prefer small commits that separate project settings, source changes, and large Unity asset updates.

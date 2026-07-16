@@ -5,7 +5,7 @@ The repository-level MIT License applies only to original project material for w
 ## SteamVR Unity Plugin
 
 - Copyright holder: Valve Corporation
-- Location: `Unity Project/Hi5_2/Assets/SteamVR`
+- Location: `Unity Project/vr-glove-data-capture/Assets/SteamVR`
 - License: BSD 3-Clause License
 - License text: [`LICENSES/SteamVR-BSD-3-Clause.txt`](LICENSES/SteamVR-BSD-3-Clause.txt)
 
@@ -13,4 +13,4 @@ The SteamVR copyright notice, license conditions, and disclaimer must be retaine
 
 ## Hi5 2.0 SDK
 
-The Hi5 2.0 SDK, vendor documentation, packages, and demo builds are not distributed by this repository. Users must obtain them from an authorized source and comply with the vendor's applicable terms.
+The Hi5 2.0 SDK, vendor documentation, packages, and demo builds are not distributed by this repository. Users must obtain them from an authorized source and comply with the vendor's applicable terms. Local imports under `Assets/NoitomHi5` and `Assets/Hi5_Interaction_SDK` are intentionally excluded from Git.
