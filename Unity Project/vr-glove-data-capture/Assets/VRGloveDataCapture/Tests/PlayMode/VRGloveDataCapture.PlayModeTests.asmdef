@@ -1,0 +1,19 @@
+{
+  "name": "VRGloveDataCapture.PlayModeTests",
+  "rootNamespace": "VRGloveDataCapture.Tests",
+  "references": [
+    "VRGloveDataCapture.Runtime"
+  ],
+  "includePlatforms": [],
+  "excludePlatforms": [],
+  "allowUnsafeCode": false,
+  "overrideReferences": false,
+  "precompiledReferences": [],
+  "autoReferenced": true,
+  "defineConstraints": [],
+  "versionDefines": [],
+  "optionalUnityReferences": [
+    "TestAssemblies"
+  ],
+  "noEngineReferences": false
+}
