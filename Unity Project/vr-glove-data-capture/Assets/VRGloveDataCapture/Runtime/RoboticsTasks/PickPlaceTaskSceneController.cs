@@ -1,4 +1,5 @@
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 
@@ -7,14 +8,67 @@ namespace VRGloveDataCapture.RoboticsTasks
     /// <summary>Owns task progress and makes the vendor reset button reset the full task scene.</summary>
     public sealed class PickPlaceTaskSceneController : MonoBehaviour
     {
+        [SerializeField] private bool autoInitializeFromScene = true;
+
         private readonly List<PickPlaceTaskObject> taskObjects = new List<PickPlaceTaskObject>();
         private readonly List<PickPlaceTargetZone> targetZones = new List<PickPlaceTargetZone>();
         private readonly HashSet<string> completedTasks = new HashSet<string>();
         private Hi5RuntimeBridge.ResetSubscription resetSubscription;
         private int totalTasks;
+        private bool initialized;
+
+        private IEnumerator Start()
+        {
+            if (!autoInitializeFromScene || initialized)
+            {
+                yield break;
+            }
+
+            // Capture the persistent task-scene membership before Hi5 reparents
+            // interactable objects into its own manager hierarchy.
+            PickPlaceTaskObject[] sceneObjects = GetComponentsInChildren<PickPlaceTaskObject>(true);
+            PickPlaceTargetZone[] sceneTargets = GetComponentsInChildren<PickPlaceTargetZone>(true);
+
+            const int maximumFramesToWait = 300;
+            for (int frame = 0; frame < maximumFramesToWait; frame++)
+            {
+                if (Hi5RuntimeBridge.IsSimpleObjectManagerReady())
+                {
+                    int boundObjectCount = 0;
+                    for (int index = 0; index < sceneObjects.Length; index++)
+                    {
+                        PickPlaceTaskObject taskObject = sceneObjects[index];
+                        if (taskObject != null && taskObject.BindToHi5())
+                        {
+                            RegisterObject(taskObject);
+                            boundObjectCount++;
+                        }
+                    }
+
+                    for (int index = 0; index < sceneTargets.Length; index++)
+                    {
+                        RegisterTarget(sceneTargets[index]);
+                    }
+
+                    Initialize(boundObjectCount);
+                    Debug.Log("[PickPlaceTasks] Bound " + boundObjectCount + " persistent task objects to Hi5.");
+                    yield break;
+                }
+
+                yield return null;
+            }
+
+            Debug.LogError("[PickPlaceTasks] Hi5 simple-object manager did not become ready; persistent task objects were not bound.");
+        }
 
         internal void Initialize(int expectedTaskCount)
         {
+            if (initialized)
+            {
+                return;
+            }
+
+            initialized = true;
             totalTasks = expectedTaskCount;
             resetSubscription = Hi5RuntimeBridge.RegisterResetCallback(this, "OnHi5Reset");
 

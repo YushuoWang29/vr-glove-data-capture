@@ -18,7 +18,7 @@
 - 支持可选的 **PIP–DIP 比例耦合**，在传感器数量有限时获得更稳定的指尖姿态。
 - 使用 VIVE Pro 2 前置摄像头实现实验性的 **video see-through** 混合现实透视。
 - 使用 Unity Recorder 在 Editor Play Mode 中录制 **VR 第一视角 MP4**。
-- 自动生成机器人操作任务，包括球入桶、杯放定位垫、罐入箱和颜色分类。
+- 提供可在 **Scene View 直接编辑**的机器人操作任务场景，包括球入桶、杯放定位垫、罐入箱和颜色分类。
 - 将新增任务接入 Hi5 原场景的统一复位消息和实体复位按钮。
 
 ### 当前尚未实现
@@ -80,7 +80,7 @@ flowchart LR
 
 1. **不直接修改 Hi5 厂商源码**：外展/内收模式通过运行时反射配置。
 2. **不提交 Hi5 专有资源**：`Assets/NoitomHi5` 与 `Assets/Hi5_Interaction_SDK` 由用户本地导入并被 Git 忽略。
-3. **不修改厂商示例 Scene**：透视组件和机器人任务台在 Play Mode 中自动加入。
+3. **不修改厂商示例 Scene**：项目任务保存在独立 `.unity` 场景；编辑器自动把原厂 `TableScene_Vive` 作为基础场景叠加加载。
 4. **统一复位消息**：新增任务订阅厂商的 `messageObjectReset`，与原有实体按钮共享同一复位链路。
 5. **资源可追溯**：YCB 子集保留对象 ID、下载归档哈希、文件哈希和 CC BY 4.0 署名信息。
 
@@ -92,7 +92,7 @@ flowchart LR
 | **PIP–DIP 耦合** | 可选，需要在手骨骼根节点配置组件 | 按比例约束 DIP 屈伸，同时保留其他旋转分量 | [FINGER_KINEMATICS.md](docs/FINGER_KINEMATICS.md) |
 | **VIVE 视频透视** | Play Mode 按 `P` 开关，默认关闭 | 将 OpenVR Tracked Camera 视频合成到虚拟物体之后 | [MIXED_REALITY.md](docs/MIXED_REALITY.md) |
 | **VR 第一视角录像** | Editor Play Mode 按 `F9` 开始/停止 | `Recordings/vr_view_*.mp4` | [VR_VIEW_RECORDING.md](docs/VR_VIEW_RECORDING.md) |
-| **机器人抓取任务台** | 打开 `TableScene_Vive` 后自动生成 | 5 个可抓物体、5 个目标区及任务完成反馈 | [PICK_PLACE_TASKS.md](docs/PICK_PLACE_TASKS.md) |
+| **机器人抓取任务台** | 打开项目自有 `PickPlaceTasks` 场景，可在 Scene View 编辑 | 5 个可抓物体、5 个目标区及任务完成反馈 | [PICK_PLACE_TASKS.md](docs/PICK_PLACE_TASKS.md) |
 | **整场任务复位** | 拍下原场景复位按钮，或按 `F8` | 恢复物体姿态、刚体状态、速度、进度和目标颜色 | [PICK_PLACE_TASKS.md](docs/PICK_PLACE_TASKS.md) |
 
 ### 机器人任务
@@ -186,18 +186,31 @@ Unity Project/vr-glove-data-capture
 
 ### 6. 运行完整交互与任务 Demo
 
-打开：
+打开项目自有任务场景：
 
 ```text
-Assets/Hi5_Interaction_SDK/Scenes/Vive/TableScene_Vive.unity
+Assets/VRGloveDataCapture/Scenes/TaskSetups/PickPlaceTasks.unity
 ```
+
+也可以按 **`F6`**，或执行：
+
+```text
+Tools > VR Glove Data Capture > Task Setups > Open Pick Place Task Setup
+```
+
+打开后，Hierarchy 中应同时出现两个 Scene：
+
+| Scene | 所有权 | 作用 | 是否直接编辑 |
+|---|---|---|---|
+| `TableScene_Vive` | Hi5 原厂、本地导入 | 校准流程、虚拟手、状态面板、原厂物品、实体复位按钮 | 否 |
+| `PickPlaceTasks` | 本仓库 | YCB 任务物体、容器、目标区、任务控制器 | 是 |
 
 进入 Play Mode 后，项目会自动执行以下扩展：
 
 - 启用手指外展/内收模式。
 - 在主相机上安装透视组件。
 - 安装 `F9` VR 录像热键。
-- 在原有桌面附近生成 YCB pick-and-place 任务台。
+- 将场景中已经可见、可编辑的 YCB 任务物体注册到 Hi5 simple-object manager。
 - 将新增物体注册到 Hi5 simple-object manager。
 - 订阅场景原有的统一复位消息。
 
@@ -208,6 +221,7 @@ Assets/Hi5_Interaction_SDK/Scenes/Vive/TableScene_Vive.unity
 | `P` | 开启/关闭 VIVE 视频透视 | Console 出现 `Passthrough Streaming: LIVE` 才表示收到连续相机帧 |
 | `F9` | 开始/停止 VR 第一视角录像 | `Recordings/` 中生成 MP4 |
 | `F8` | 发布全场复位消息 | 新增物体、任务进度和目标颜色恢复 |
+| `F7`（Edit Mode） | 运行 pick-and-place Play Mode 冒烟测试 | Console 出现 `passed=1, failed=0, skipped=0` |
 | 场景实体复位按钮 | 与 `F8` 相同的统一复位 | 原厂物体和新增任务物体同时恢复 |
 
 ## 项目目录
@@ -238,6 +252,8 @@ vr-glove-data-capture/
       │  │  │  ├─ Capture/
       │  │  │  └─ RoboticsTasks/
       │  │  ├─ Editor/             # Recorder 桥接和资源验证器
+      │  │  ├─ Scenes/TaskSetups/  # Git 管理、可直接编辑的任务场景
+      │  │  ├─ Materials/          # 任务场景持久化材质
       │  │  ├─ Resources/          # YCB 轻量模型子集
       │  │  └─ Tests/PlayMode/     # 任务生成与复位冒烟测试
       │  ├─ NoitomHi5/             # 本地导入，Git 忽略
@@ -263,6 +279,7 @@ Tools > VR Glove Data Capture > Validate Pick Place Task Assets
 - 三个 YCB 模型是否能够通过 `Resources.Load` 载入。
 - 模型材质是否成功关联纹理。
 - `Hi5ObjectGrasp`、`Hi5Plane` 和 `Hi5ObjectTrigger` 层是否位于正确索引。
+- 项目自有 `PickPlaceTasks.unity` 是否存在。
 - 本地 `TableScene_Vive` 是否存在。
 
 ### Play Mode 自动测试
@@ -270,12 +287,14 @@ Tools > VR Glove Data Capture > Validate Pick Place Task Assets
 Test Runner 中的测试：
 
 ```text
-PickPlaceTaskSceneSmokeTests.TableSceneBuildsFiveTasksAndHi5ResetRestoresTheirPoses
+PickPlaceTaskSceneSmokeTests.EditableTaskSceneBindsFiveTasksAndHi5ResetRestoresTheirPoses
 ```
 
-该测试会加载真实厂商场景并验证：
+可以直接按 `F7`，或执行 `Tools > VR Glove Data Capture > Task Setups > Run Pick Place Play Mode Test` 运行该测试。
 
-1. 生成 5 个可抓物体和 5 个目标区。
+该测试会先加载项目自有任务场景，再叠加加载真实厂商场景，并验证：
+
+1. 持久化场景包含 5 个可抓物体和 5 个目标区。
 2. 五项匹配放置均能触发成功。
 3. `messageObjectReset` 能恢复全部物体的位置和 kinematic 状态。
 4. 刚体线速度与角速度归零。
@@ -301,9 +320,9 @@ PickPlaceTaskSceneSmokeTests.TableSceneBuildsFiveTasksAndHi5ResetRestoresTheirPo
 
 确认当前处于 **Unity Editor Play Mode**，并让 Game View 获得键盘焦点。录像功能依赖 Editor-only 的 Unity Recorder，不是 Windows Player 录像器。
 
-### 机器人任务台没有生成
+### 打开 `TableScene_Vive` 没看到机器人任务台
 
-确认打开的 Scene 名称是 `TableScene_Vive`，并检查 Console 是否出现 `Hi5 simple-object manager did not become ready`。也可以先运行资源验证菜单定位缺失的 SDK、资源或 Layer。
+这是双场景结构的预期行为。请打开 `Assets/VRGloveDataCapture/Scenes/TaskSetups/PickPlaceTasks.unity`，或按 `F6`。编辑器会自动叠加加载原厂 `TableScene_Vive`；如果未加载，先运行资源验证菜单检查本地 SDK 是否完整。
 
 ## 数据与版本管理
 

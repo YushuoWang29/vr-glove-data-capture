@@ -96,9 +96,9 @@ namespace VRGloveDataCapture.RoboticsTasks
         }
     }
 
-    internal static class PickPlaceTaskLayout
+    public static class PickPlaceTaskLayout
     {
-        internal const string LayoutRootName = "VRGlove_PickPlace_Tasks";
+        public const string LayoutRootName = "VRGlove_PickPlace_Tasks";
 
         private const int Hi5ObjectLayer = 11;
         private const int Hi5PlaneLayer = 12;
@@ -111,7 +111,7 @@ namespace VRGloveDataCapture.RoboticsTasks
         private static readonly Color RedColor = new Color(0.78f, 0.08f, 0.08f, 1f);
         private static readonly Color BlueColor = new Color(0.06f, 0.28f, 0.85f, 1f);
 
-        internal static GameObject Build(Scene scene)
+        public static GameObject Build(Scene scene, bool bindToHi5Immediately = true)
         {
             Vector3 anchor = FindTaskAnchor();
             float surfaceY = FindSurfaceHeight(anchor);
@@ -153,7 +153,8 @@ namespace VRGloveDataCapture.RoboticsTasks
                 0.074f,
                 0.15f,
                 true,
-                controller);
+                controller,
+                bindToHi5Immediately);
             if (ball != null)
             {
                 createdTaskCount++;
@@ -182,7 +183,8 @@ namespace VRGloveDataCapture.RoboticsTasks
                 0.117f,
                 0.24f,
                 false,
-                controller);
+                controller,
+                bindToHi5Immediately);
             if (mug != null)
             {
                 createdTaskCount++;
@@ -214,7 +216,8 @@ namespace VRGloveDataCapture.RoboticsTasks
                 0.102f,
                 0.32f,
                 false,
-                controller);
+                controller,
+                bindToHi5Immediately);
             if (can != null)
             {
                 createdTaskCount++;
@@ -255,7 +258,8 @@ namespace VRGloveDataCapture.RoboticsTasks
                 redStart,
                 surfaceY,
                 RedColor,
-                controller);
+                controller,
+                bindToHi5Immediately);
             PickPlaceTaskObject blueBlock = CreateBlock(
                 root.transform,
                 "Blue_Sorting_Block",
@@ -264,7 +268,8 @@ namespace VRGloveDataCapture.RoboticsTasks
                 blueStart,
                 surfaceY,
                 BlueColor,
-                controller);
+                controller,
+                bindToHi5Immediately);
             if (redBlock != null)
             {
                 createdTaskCount++;
@@ -275,7 +280,11 @@ namespace VRGloveDataCapture.RoboticsTasks
             }
             CreateLabel(root.transform, "4  SORT  RED / BLUE", origin + new Vector3(0.59f, 0.009f, -0.225f), WhiteColor, 0.0105f);
 
-            controller.Initialize(createdTaskCount);
+            if (bindToHi5Immediately)
+            {
+                controller.Initialize(createdTaskCount);
+            }
+
             return root;
         }
 
@@ -308,7 +317,8 @@ namespace VRGloveDataCapture.RoboticsTasks
             float desiredLargestDimension,
             float mass,
             bool sphericalCollider,
-            PickPlaceTaskSceneController controller)
+            PickPlaceTaskSceneController controller,
+            bool bindToHi5Immediately)
         {
             GameObject source = Resources.Load<GameObject>(resourcePath);
             if (source == null)
@@ -372,16 +382,20 @@ namespace VRGloveDataCapture.RoboticsTasks
 
             ConfigureRigidbody(root, mass);
             PickPlaceTaskObject taskObject = root.AddComponent<PickPlaceTaskObject>();
-            taskObject.Configure(taskId);
+            taskObject.Configure(taskId, objectId, objectName);
 
-            if (!Hi5RuntimeBridge.AddSimpleObjectComponents(root, objectId, objectName))
+            if (bindToHi5Immediately && !Hi5RuntimeBridge.AddSimpleObjectComponents(root, objectId, objectName))
             {
                 Object.Destroy(root);
                 return null;
             }
 
             root.SetActive(true);
-            controller.RegisterObject(taskObject);
+            if (bindToHi5Immediately)
+            {
+                controller.RegisterObject(taskObject);
+            }
+
             return taskObject;
         }
 
@@ -393,7 +407,8 @@ namespace VRGloveDataCapture.RoboticsTasks
             Vector3 horizontalStart,
             float surfaceY,
             Color color,
-            PickPlaceTaskSceneController controller)
+            PickPlaceTaskSceneController controller,
+            bool bindToHi5Immediately)
         {
             GameObject block = GameObject.CreatePrimitive(PrimitiveType.Cube);
             block.name = objectName;
@@ -406,16 +421,20 @@ namespace VRGloveDataCapture.RoboticsTasks
 
             ConfigureRigidbody(block, 0.18f);
             PickPlaceTaskObject taskObject = block.AddComponent<PickPlaceTaskObject>();
-            taskObject.Configure(taskId);
+            taskObject.Configure(taskId, objectId, objectName);
 
-            if (!Hi5RuntimeBridge.AddSimpleObjectComponents(block, objectId, objectName))
+            if (bindToHi5Immediately && !Hi5RuntimeBridge.AddSimpleObjectComponents(block, objectId, objectName))
             {
                 Object.Destroy(block);
                 return null;
             }
 
             block.SetActive(true);
-            controller.RegisterObject(taskObject);
+            if (bindToHi5Immediately)
+            {
+                controller.RegisterObject(taskObject);
+            }
+
             return taskObject;
         }
 
