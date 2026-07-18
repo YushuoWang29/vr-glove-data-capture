@@ -37,6 +37,7 @@ namespace VRGloveDataCapture.Editor
             CaptureLifecycle.TrialStarted += OnCaptureTrialStarted;
             CaptureLifecycle.TrialStopping -= OnCaptureTrialStopping;
             CaptureLifecycle.TrialStopping += OnCaptureTrialStopping;
+            VrViewRecordingHotkey.ReportState(false, "VR view recording is idle.");
         }
 
         [MenuItem("Tools/VR Glove Data Capture/Toggle VR View Recording")]
@@ -132,6 +133,11 @@ namespace VRGloveDataCapture.Editor
                 Debug.Log(
                     "[VRGloveDataCapture] VR VIEW RECORDING STARTED (F9 to stop): " +
                     currentOutputPath);
+                VrViewRecordingHotkey.ReportState(
+                    true,
+                    managedByCaptureTrial
+                        ? "Recording synchronized trial video."
+                        : "Recording standalone VR view video.");
                 if (managedByCaptureTrial)
                 {
                     CaptureEventBus.Publish(
@@ -146,6 +152,7 @@ namespace VRGloveDataCapture.Editor
                 Debug.LogError(
                     "[VRGloveDataCapture] Failed to start VR view recording: " + exception);
                 StopAndRelease();
+                VrViewRecordingHotkey.ReportState(false, "VR recording failed: " + exception.Message);
             }
         }
 
@@ -180,6 +187,7 @@ namespace VRGloveDataCapture.Editor
 
             currentOutputPath = null;
             managedByCaptureTrial = false;
+            VrViewRecordingHotkey.ReportState(false, "VR view recording is idle.");
         }
 
         private static void OnCaptureTrialStarted(CaptureTrialContext context)

@@ -18,6 +18,9 @@ namespace VRGloveDataCapture.Editor
         private const string AdaptiveContactSmokeTestName =
             "VRGloveDataCapture.Tests.AdaptiveHandContactSmokeTests." +
             "SolverAutoInstallsOnBothVisibleHandsWithoutWritingSourceBones";
+        private const string GazeControlPanelSmokeTestName =
+            "VRGloveDataCapture.Tests.GazeControlPanelSmokeTests." +
+            "PanelPreservesCalibrationAndRoutesVendorGazeToProjectControls";
 
         private static readonly TestRunnerApi Api;
 
@@ -69,7 +72,8 @@ namespace VRGloveDataCapture.Editor
                 {
                     SmokeTestName,
                     CaptureSmokeTestName,
-                    AdaptiveContactSmokeTestName
+                    AdaptiveContactSmokeTestName,
+                    GazeControlPanelSmokeTestName
                 }
             }));
 

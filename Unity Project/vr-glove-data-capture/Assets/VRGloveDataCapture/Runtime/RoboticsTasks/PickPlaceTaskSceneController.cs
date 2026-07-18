@@ -127,7 +127,13 @@ namespace VRGloveDataCapture.RoboticsTasks
                 return;
             }
 
-            if (!Hi5RuntimeBridge.DispatchReset())
+            RequestReset();
+        }
+
+        /// <summary>Runs the same full-scene reset path as the vendor button and F8.</summary>
+        public void RequestReset()
+        {
+            if (!SceneResetCommand.TryResetAll())
             {
                 ResetAll();
             }

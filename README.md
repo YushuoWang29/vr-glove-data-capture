@@ -2,9 +2,9 @@
 
 基于 **Unity、HTC VIVE Pro 2、VIVE Tracker 3.0 与 Noitom Hi5 2.0 数据手套** 的手部运动采集和机器人操作示教项目。
 
-项目当前已经跑通从 SteamVR 设备上线、Hi5 手套接入、V-pose 校准、虚拟手驱动到桌面物体交互的完整流程，并在此基础上增加了手指运动学增强、手–物体自适应视觉接触、VIVE 前置摄像头透视、VR 第一视角录像、机器人 pick-and-place 任务场景和按 session/trial 管理的结构化同步数据采集。
+项目当前已经跑通从 SteamVR 设备上线、Hi5 手套接入、V-pose 校准、虚拟手驱动到桌面物体交互的完整流程，并在此基础上增加了校准后注视功能面板、手指运动学增强、手–物体自适应视觉接触、VIVE 前置摄像头透视、VR 第一视角录像、机器人 pick-and-place 任务场景和按 session/trial 管理的结构化同步数据采集。
 
-> - **当前推荐开发版本**：`codex/adaptive-hand-contact`
+> - **当前推荐开发版本**：`codex/gaze-control-panel`
 > - **Unity 固定版本**：`2019.4.18f1`
 > - **主要运行方式**：Windows + SteamVR + Unity Editor Play Mode
 
@@ -23,6 +23,7 @@
 - 将新增任务接入 Hi5 原场景的统一复位消息和实体复位按钮。
 - 提供 **统一实验数据采集**：导出手部骨骼、关节角、物体与头显位姿、Hi5 模块状态和任务事件，并与 trial 视频共享主机单调时间轴。
 - 提供 **session/trial 元数据管理**、操作员控制窗口、原子化文件收尾、SHA-256 校验和及可插拔的原始 IMU provider 接口。
+- 完整校准后把原厂主面板切换为 **注视功能控制中心**，可用原厂驻留圆环直接控制透视、VR 视频、trial、事件标记、场景复位和重新校准；原厂校准面板与快捷键全部保留。
 
 ### 当前尚未实现
 
@@ -93,6 +94,7 @@ flowchart LR
 6. **统一时钟与原子化落盘**：一个采样时刻只读取一次单调时钟，多流共享 `sample_id`/`t_trial_ns`；录制中使用 `.partial`，正常结束后再生成 manifest、校验和与 `COMPLETE`。
 7. **原始值不造假**：解算后的骨骼/关节姿态与九轴原始 IMU 分流记录；缺少厂商原始接口时显式标记不可用。
 8. **视觉接触与测量隔离**：接触求解器只修改 `Hi5_Hand_Visible_Hand` 的最终显示 Transform；统一采集继续读取 `HI5_InertiaInstance.HandBones`，不会把表面贴合伪装成手套测量。
+9. **原厂注视链路复用**：功能面板的碰撞区动态挂接厂商 `VRInteractiveItem`，选择进度继续由原场景 `VREyeRaycaster` 和 `SelectionRadial` 驱动；厂商源码和场景文件均不改写。
 
 ## 主要功能
 
@@ -106,6 +108,7 @@ flowchart LR
 | **统一实验数据采集** | `Capture Control` 配置；Play Mode 按 `F12` 启停 trial、`F11` 标记 | `Captures/participants/<ID>/sessions/...` 下的 CSV、事件、manifest、校验和与同步 MP4 | [DATA_CAPTURE.md](docs/DATA_CAPTURE.md) |
 | **机器人抓取任务台** | 打开项目自有 `PickPlaceTasks` 场景，可在 Scene View 编辑 | 5 个可抓物体、5 个目标区及任务完成反馈 | [PICK_PLACE_TASKS.md](docs/PICK_PLACE_TASKS.md) |
 | **整场任务复位** | 拍下原场景复位按钮，或按 `F8` | 恢复物体姿态、刚体状态、速度、进度和目标颜色 | [PICK_PLACE_TASKS.md](docs/PICK_PLACE_TASKS.md) |
+| **校准后注视功能面板** | 完成 V/B/P-pose 后自动替换主面板内容 | 注视控制透视、VR 视频、trial、标记、复位和重新校准；状态实时显示 | [GAZE_CONTROL_PANEL.md](docs/GAZE_CONTROL_PANEL.md) |
 
 ### 机器人任务
 
@@ -149,7 +152,7 @@ flowchart LR
 ```powershell
 git clone https://github.com/YushuoWang29/vr-glove-data-capture.git
 cd vr-glove-data-capture
-git checkout codex/adaptive-hand-contact
+git checkout codex/gaze-control-panel
 ```
 
 默认 `main` 当前仍是初始化基线；在功能分支合并前，应使用上述推荐分支。
@@ -227,8 +230,18 @@ Tools > VR Glove Data Capture > Task Setups > Open Pick Place Task Setup
 - 将场景中已经可见、可编辑的 YCB 任务物体注册到 Hi5 simple-object manager。
 - 将新增物体注册到 Hi5 simple-object manager。
 - 订阅场景原有的统一复位消息。
+- 完成原厂 V/B/P-pose 校准后，将原厂主窗口自动切换为注视功能控制中心。
 
-### 7. 常用按键
+### 7. 校准后使用注视功能面板
+
+1. 按原厂流程注视 **Calibrate**，依次完成 V-pose、B-pose 和 P-pose。
+2. P-pose 完成后，主窗口自动显示六个功能按钮；保持视线直到原厂圆形进度完成即可触发。
+3. 面板按钮可控制 **Passthrough、VR View Video、Trial Capture、Event Marker、Reset Scene、Recalibrate**。
+4. **Recalibrate** 会返回原厂校准界面；活动 trial 或视频未停止时会拒绝进入，避免截断实验记录。
+
+完整状态、限制和排障见 [GAZE_CONTROL_PANEL.md](docs/GAZE_CONTROL_PANEL.md)。
+
+### 8. 常用按键与注视操作
 
 | 按键/操作 | 功能 | 成功判据 |
 |---|---|---|
@@ -237,13 +250,14 @@ Tools > VR Glove Data Capture > Task Setups > Open Pick Place Task Setup
 | `F12` | 开始/停止并最终化一个统一采集 trial | Console 出现 `TRIAL STARTED` / `TRIAL FINALIZED`，trial 目录出现 `COMPLETE` |
 | `F11` | 在活动 trial 中写入人工事件标记 | `events/events.csv` 出现 `manual_marker` |
 | `F8` | 发布全场复位消息 | 新增物体、任务进度和目标颜色恢复 |
+| 校准后注视功能按钮 | 与 `P/F9/F12/F11/F8` 相同的公共控制接口，并提供重新校准 | 按钮第二行实时显示 `LIVE`、`RECORDING`、`READY` 或不可用原因 |
 | `Ctrl+Shift+F7`（Edit Mode） | 运行 pick-and-place Play Mode 冒烟测试 | Console 出现 `passed=1, failed=0, skipped=0` |
-| `Ctrl+Shift+F10`（Edit Mode） | 运行项目全部 3 项 Play Mode 回归测试 | Console 出现 `passed=3, failed=0, skipped=0` |
+| `Ctrl+Shift+F10`（Edit Mode） | 运行项目全部 4 项 Play Mode 回归测试 | Console 出现 `passed=4, failed=0, skipped=0` |
 | 场景实体复位按钮 | 与 `F8` 相同的统一复位 | 原厂物体和新增任务物体同时恢复 |
 
 三个 Edit Mode 命令使用 Unity `Shortcut` API 注册，可在 `Edit > Shortcuts` 的 **VR Glove Data Capture** 分类下重新绑定。项目不再占用无修饰键的 `F6`、`F7` 和 `F10`，从而避免与 Terrain 和 Recorder 默认快捷键冲突。Play Mode 的 `F8/F9/F11/F12` 是 Game View 运行时输入，不注册为编辑器全局命令。
 
-### 8. 采集结构化示教数据
+### 9. 采集结构化示教数据
 
 1. 执行 `Tools > VR Glove Data Capture > Capture Control`。
 2. 填写匿名 Participant ID、Session Label、Task ID 和 Condition。
@@ -268,6 +282,7 @@ vr-glove-data-capture/
 │  ├─ SETUP.md                     # 硬件、SDK 和 Unity 配置
 │  ├─ FINGER_KINEMATICS.md         # 手指自由度与 PIP–DIP 耦合
 │  ├─ HAND_OBJECT_CONTACT.md        # 可视手指表面接触与数据隔离
+│  ├─ GAZE_CONTROL_PANEL.md         # 校准后注视面板、状态与安全约束
 │  ├─ MIXED_REALITY.md             # VIVE 视频透视
 │  ├─ VR_VIEW_RECORDING.md         # VR 第一视角录像
 │  ├─ DATA_CAPTURE.md               # session/trial、多流数据、时间戳和数据字典
@@ -283,7 +298,8 @@ vr-glove-data-capture/
       │  │  │  ├─ HandInteraction/
       │  │  │  ├─ MixedReality/
       │  │  │  ├─ Capture/
-      │  │  │  └─ RoboticsTasks/
+      │  │  │  ├─ RoboticsTasks/
+      │  │  │  └─ UserInterface/    # 校准状态桥接和注视功能控制中心
       │  │  ├─ Editor/             # Recorder 桥接和资源验证器
       │  │  ├─ Scenes/TaskSetups/  # Git 管理、可直接编辑的任务场景
       │  │  ├─ Materials/          # 任务场景持久化材质
@@ -341,7 +357,15 @@ PickPlaceTaskSceneSmokeTests.EditableTaskSceneBindsFiveTasksAndHi5ResetRestoresT
 AdaptiveHandContactSmokeTests.SolverAutoInstallsOnBothVisibleHandsWithoutWritingSourceBones
 ```
 
-该测试会加载真实 Hi5 场景，验证左右手自动安装、源/显示骨骼隔离、刚体接触时源姿态零写入，并构造一个食指–球面探针接触来确认只截停可视指骨。按 **`Ctrl+Shift+F10`**（Edit Mode）或执行 `Tools > VR Glove Data Capture > Run All Project Play Mode Tests` 可以一次运行该测试、pick-and-place 复位测试和统一采集测试；当前结果为 `passed=3, failed=0, skipped=0`。
+该测试会加载真实 Hi5 场景，验证左右手自动安装、源/显示骨骼隔离、刚体接触时源姿态零写入，并构造一个食指–球面探针接触来确认只截停可视指骨。
+
+校准后注视面板测试为：
+
+```text
+GazeControlPanelSmokeTests.PanelPreservesCalibrationAndRoutesVendorGazeToProjectControls
+```
+
+该测试验证原厂校准对象不被删除、六个按钮均带有原厂 `VRInteractiveItem` 和 gaze collider、驻留完成可调用透视控制，以及重新校准会恢复原厂校准面板。按 **`Ctrl+Shift+F10`**（Edit Mode）或执行 `Tools > VR Glove Data Capture > Run All Project Play Mode Tests` 可以一次运行注视面板、手–物体接触、pick-and-place 复位和统一采集四项测试；当前结果为 `passed=4, failed=0, skipped=0`。
 
 统一采集的端到端测试为：
 
