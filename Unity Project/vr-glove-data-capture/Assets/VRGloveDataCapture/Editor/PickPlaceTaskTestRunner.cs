@@ -1,4 +1,5 @@
 using UnityEditor;
+using UnityEditor.ShortcutManagement;
 using UnityEditor.TestTools.TestRunner.Api;
 using UnityEngine;
 
@@ -26,7 +27,11 @@ namespace VRGloveDataCapture.Editor
             Api.RegisterCallbacks(ScriptableObject.CreateInstance<PickPlaceTestCallbacks>());
         }
 
-        [MenuItem("Tools/VR Glove Data Capture/Task Setups/Run Pick Place Play Mode Test _F7", priority = 140)]
+        [MenuItem("Tools/VR Glove Data Capture/Task Setups/Run Pick Place Play Mode Test", priority = 140)]
+        [Shortcut(
+            "VR Glove Data Capture/Tests/Run Pick Place Play Mode Test",
+            KeyCode.F7,
+            ShortcutModifiers.Action | ShortcutModifiers.Shift)]
         public static void RunSmokeTest()
         {
             Api.Execute(new ExecutionSettings(new Filter
@@ -50,7 +55,11 @@ namespace VRGloveDataCapture.Editor
             Debug.Log("[DataCaptureTests] Started Play Mode smoke test: " + CaptureSmokeTestName);
         }
 
-        [MenuItem("Tools/VR Glove Data Capture/Run All Project Play Mode Tests _F10", priority = 200)]
+        [MenuItem("Tools/VR Glove Data Capture/Run All Project Play Mode Tests", priority = 200)]
+        [Shortcut(
+            "VR Glove Data Capture/Tests/Run All Project Play Mode Tests",
+            KeyCode.F10,
+            ShortcutModifiers.Action | ShortcutModifiers.Shift)]
         public static void RunAllProjectSmokeTests()
         {
             Api.Execute(new ExecutionSettings(new Filter

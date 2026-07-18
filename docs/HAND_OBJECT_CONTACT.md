@@ -102,7 +102,7 @@ flowchart LR
 Tools > VR Glove Data Capture > Run All Project Play Mode Tests
 ```
 
-或在 Edit Mode 按 `F10`。其中 `AdaptiveHandContactSmokeTests` 会：
+或在 Edit Mode 按 `Ctrl+Shift+F10`。其中 `AdaptiveHandContactSmokeTests` 会：
 
 1. 加载真实 `TableScene_Vive` 并确认左右可视手均自动安装求解器。
 2. 确认可视手与 Hi5 源/校准骨骼不是同一 Transform 层级。

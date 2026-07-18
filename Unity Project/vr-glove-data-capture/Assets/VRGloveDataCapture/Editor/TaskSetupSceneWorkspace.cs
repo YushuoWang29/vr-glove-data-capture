@@ -1,6 +1,7 @@
 using System.IO;
 using UnityEditor;
 using UnityEditor.SceneManagement;
+using UnityEditor.ShortcutManagement;
 using UnityEngine;
 using UnityEngine.SceneManagement;
 using VRGloveDataCapture.RoboticsTasks;
@@ -28,7 +29,11 @@ namespace VRGloveDataCapture.Editor
             EditorApplication.delayCall += EnsureBaseScenesForOpenTaskSetups;
         }
 
-        [MenuItem("Tools/VR Glove Data Capture/Task Setups/Open Pick Place Task Setup _F6", priority = 100)]
+        [MenuItem("Tools/VR Glove Data Capture/Task Setups/Open Pick Place Task Setup", priority = 100)]
+        [Shortcut(
+            "VR Glove Data Capture/Task Setups/Open Pick Place Task Setup",
+            KeyCode.F6,
+            ShortcutModifiers.Action | ShortcutModifiers.Shift)]
         public static void OpenPickPlaceTaskSetup()
         {
             EnsurePickPlaceSceneExists();

@@ -204,7 +204,7 @@ Unity Project/vr-glove-data-capture
 Assets/VRGloveDataCapture/Scenes/TaskSetups/PickPlaceTasks.unity
 ```
 
-也可以按 **`F6`**，或执行：
+也可以按 **`Ctrl+Shift+F6`**，或执行：
 
 ```text
 Tools > VR Glove Data Capture > Task Setups > Open Pick Place Task Setup
@@ -237,9 +237,11 @@ Tools > VR Glove Data Capture > Task Setups > Open Pick Place Task Setup
 | `F12` | 开始/停止并最终化一个统一采集 trial | Console 出现 `TRIAL STARTED` / `TRIAL FINALIZED`，trial 目录出现 `COMPLETE` |
 | `F11` | 在活动 trial 中写入人工事件标记 | `events/events.csv` 出现 `manual_marker` |
 | `F8` | 发布全场复位消息 | 新增物体、任务进度和目标颜色恢复 |
-| `F7`（Edit Mode） | 运行 pick-and-place Play Mode 冒烟测试 | Console 出现 `passed=1, failed=0, skipped=0` |
-| `F10`（Edit Mode） | 运行项目全部 3 项 Play Mode 回归测试 | Console 出现 `passed=3, failed=0, skipped=0` |
+| `Ctrl+Shift+F7`（Edit Mode） | 运行 pick-and-place Play Mode 冒烟测试 | Console 出现 `passed=1, failed=0, skipped=0` |
+| `Ctrl+Shift+F10`（Edit Mode） | 运行项目全部 3 项 Play Mode 回归测试 | Console 出现 `passed=3, failed=0, skipped=0` |
 | 场景实体复位按钮 | 与 `F8` 相同的统一复位 | 原厂物体和新增任务物体同时恢复 |
+
+三个 Edit Mode 命令使用 Unity `Shortcut` API 注册，可在 `Edit > Shortcuts` 的 **VR Glove Data Capture** 分类下重新绑定。项目不再占用无修饰键的 `F6`、`F7` 和 `F10`，从而避免与 Terrain 和 Recorder 默认快捷键冲突。Play Mode 的 `F8/F9/F11/F12` 是 Game View 运行时输入，不注册为编辑器全局命令。
 
 ### 8. 采集结构化示教数据
 
@@ -321,7 +323,7 @@ Test Runner 中的测试：
 PickPlaceTaskSceneSmokeTests.EditableTaskSceneBindsFiveTasksAndHi5ResetRestoresTheirPoses
 ```
 
-可以直接按 `F7`，或执行 `Tools > VR Glove Data Capture > Task Setups > Run Pick Place Play Mode Test` 运行该测试。
+可以直接按 `Ctrl+Shift+F7`，或执行 `Tools > VR Glove Data Capture > Task Setups > Run Pick Place Play Mode Test` 运行该测试。
 
 该测试会先加载项目自有任务场景，再叠加加载真实厂商场景，并验证：
 
@@ -339,7 +341,7 @@ PickPlaceTaskSceneSmokeTests.EditableTaskSceneBindsFiveTasksAndHi5ResetRestoresT
 AdaptiveHandContactSmokeTests.SolverAutoInstallsOnBothVisibleHandsWithoutWritingSourceBones
 ```
 
-该测试会加载真实 Hi5 场景，验证左右手自动安装、源/显示骨骼隔离、刚体接触时源姿态零写入，并构造一个食指–球面探针接触来确认只截停可视指骨。按 **`F10`**（Edit Mode）或执行 `Tools > VR Glove Data Capture > Run All Project Play Mode Tests` 可以一次运行该测试、pick-and-place 复位测试和统一采集测试；当前结果为 `passed=3, failed=0, skipped=0`。
+该测试会加载真实 Hi5 场景，验证左右手自动安装、源/显示骨骼隔离、刚体接触时源姿态零写入，并构造一个食指–球面探针接触来确认只截停可视指骨。按 **`Ctrl+Shift+F10`**（Edit Mode）或执行 `Tools > VR Glove Data Capture > Run All Project Play Mode Tests` 可以一次运行该测试、pick-and-place 复位测试和统一采集测试；当前结果为 `passed=3, failed=0, skipped=0`。
 
 统一采集的端到端测试为：
 
@@ -373,7 +375,7 @@ UnifiedCaptureSmokeTests.TrialFinalizesAtomicMachineReadableStreamsAndManifest
 
 ### 打开 `TableScene_Vive` 没看到机器人任务台
 
-这是双场景结构的预期行为。请打开 `Assets/VRGloveDataCapture/Scenes/TaskSetups/PickPlaceTasks.unity`，或按 `F6`。编辑器会自动叠加加载原厂 `TableScene_Vive`；如果未加载，先运行资源验证菜单检查本地 SDK 是否完整。
+这是双场景结构的预期行为。请打开 `Assets/VRGloveDataCapture/Scenes/TaskSetups/PickPlaceTasks.unity`，或按 `Ctrl+Shift+F6`。编辑器会自动叠加加载原厂 `TableScene_Vive`；如果未加载，先运行资源验证菜单检查本地 SDK 是否完整。
 
 ## 数据与版本管理
 

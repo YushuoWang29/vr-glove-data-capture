@@ -8,7 +8,7 @@
 Assets/VRGloveDataCapture/Scenes/TaskSetups/PickPlaceTasks.unity
 ```
 
-可以双击该文件、按 `F6`，或执行以下菜单打开：
+可以双击该文件、按 `Ctrl+Shift+F6`，或执行以下菜单打开：
 
 ```text
 Tools > VR Glove Data Capture > Task Setups > Open Pick Place Task Setup
@@ -149,7 +149,7 @@ Tools > VR Glove Data Capture > Validate Pick Place Task Assets
 PickPlaceTaskSceneSmokeTests.EditableTaskSceneBindsFiveTasksAndHi5ResetRestoresTheirPoses
 ```
 
-在 Edit Mode 下按 `F7`，或执行 `Tools > VR Glove Data Capture > Task Setups > Run Pick Place Play Mode Test`，即可单独运行该回归测试。Console 汇总 `passed=1, failed=0, skipped=0` 表示通过。
+在 Edit Mode 下按 `Ctrl+Shift+F7`，或执行 `Tools > VR Glove Data Capture > Task Setups > Run Pick Place Play Mode Test`，即可单独运行该回归测试。Console 汇总 `passed=1, failed=0, skipped=0` 表示通过。
 
 测试先加载持久化任务场景，再以 Additive 模式加载原厂场景，并验证 5 个任务对象完成 Hi5 绑定、5 个目标判据全部触发，以及 `messageObjectReset` 恢复位置、刚体状态、速度、任务进度和目标颜色。未安装本地 Hi5 Interaction SDK 时测试标记为忽略。
 
