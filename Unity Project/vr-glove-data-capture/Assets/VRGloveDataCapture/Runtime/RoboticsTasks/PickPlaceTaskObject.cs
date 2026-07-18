@@ -19,6 +19,7 @@ namespace VRGloveDataCapture.RoboticsTasks
         private Vector3 startScale;
         private Rigidbody body;
         private bool hasStartPose;
+        private bool wasHeldByHi5Hand;
 
         internal void Configure(string configuredTaskId, int objectId, string objectName)
         {
@@ -45,6 +46,18 @@ namespace VRGloveDataCapture.RoboticsTasks
             gameObject.SetActive(false);
             bool configured = Hi5RuntimeBridge.AddSimpleObjectComponents(gameObject, hi5ObjectId, hi5ObjectName);
             gameObject.SetActive(wasActive);
+            if (configured && wasActive &&
+                !Hi5RuntimeBridge.IsRegisteredSimpleObject(gameObject, hi5ObjectId))
+            {
+                Debug.LogError(
+                    "[PickPlaceTasks] Hi5 object id " + hi5ObjectId +
+                    " is already owned by another object; disabling duplicate " + name + ".",
+                    this);
+                gameObject.SetActive(false);
+                return false;
+            }
+
+            UpdatePhysicsMode();
             return configured;
         }
 
@@ -73,6 +86,7 @@ namespace VRGloveDataCapture.RoboticsTasks
             {
                 body.velocity = Vector3.zero;
                 body.angularVelocity = Vector3.zero;
+                body.collisionDetectionMode = CollisionDetectionMode.Discrete;
                 body.isKinematic = true;
             }
 
@@ -85,8 +99,72 @@ namespace VRGloveDataCapture.RoboticsTasks
             {
                 body.velocity = Vector3.zero;
                 body.angularVelocity = Vector3.zero;
-                body.Sleep();
+                body.useGravity = true;
+                body.isKinematic = false;
+                body.collisionDetectionMode = CollisionDetectionMode.ContinuousDynamic;
+                body.WakeUp();
             }
+        }
+
+        private void OnTransformParentChanged()
+        {
+            UpdatePhysicsMode();
+        }
+
+        private void FixedUpdate()
+        {
+            UpdatePhysicsMode();
+        }
+
+        private void UpdatePhysicsMode()
+        {
+            if (body == null)
+            {
+                body = GetComponent<Rigidbody>();
+            }
+            if (body == null)
+            {
+                return;
+            }
+
+            bool heldByHi5Hand = IsUnderHi5Hand(transform.parent);
+            body.useGravity = true;
+            if (heldByHi5Hand && !body.isKinematic)
+            {
+                body.collisionDetectionMode = CollisionDetectionMode.ContinuousSpeculative;
+            }
+            body.isKinematic = heldByHi5Hand;
+            if (!heldByHi5Hand)
+            {
+                body.collisionDetectionMode = CollisionDetectionMode.ContinuousDynamic;
+            }
+            if (wasHeldByHi5Hand && !heldByHi5Hand)
+            {
+                body.WakeUp();
+            }
+            wasHeldByHi5Hand = heldByHi5Hand;
+        }
+
+        private static bool IsUnderHi5Hand(Transform candidate)
+        {
+            for (Transform current = candidate; current != null; current = current.parent)
+            {
+                Component[] components = current.GetComponents<Component>();
+                for (int index = 0; index < components.Length; index++)
+                {
+                    Component component = components[index];
+                    string fullName = component == null ? string.Empty : component.GetType().FullName;
+                    if (fullName == "Hi5_Interaction_Core.Hi5_Glove_Interaction_Hand" ||
+                        fullName == "Hi5_Interaction_Core.Hi5_Hand_Visible_Hand" ||
+                        fullName == "Hi5_Interaction_Core.Hi5_Hand_Palm" ||
+                        fullName == "Hi5_Interaction_Core.Hi5_Glove_Collider_Palm")
+                    {
+                        return true;
+                    }
+                }
+            }
+
+            return false;
         }
     }
 }

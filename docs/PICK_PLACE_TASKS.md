@@ -45,7 +45,9 @@ Assets/Hi5_Interaction_SDK/Scenes/Vive/TableScene_Vive.unity
 4. `PickPlaceTargetZone` 监听匹配物体进入目标触发体。
 5. 控制器订阅原厂 `messageObjectReset`，把新增任务接入同一个实体复位按钮。
 
-如果只打开原厂 `TableScene_Vive`，旧的运行时安装器仍会在 Play Mode 中生成兼容布局，作为向后兼容入口；该临时布局不会出现在编辑模式。新任务开发应始终使用项目自有任务场景。
+如果只打开原厂 `TableScene_Vive`，项目**不会再在 Play Mode 临时生成第二套任务布局**。所有 pick-and-place 内容只由项目自有 `PickPlaceTasks` 持久化场景提供，从源头避免可见模型与实际被抓物体分属两套实例而产生“残影/隔空抓取”。
+
+每个任务物体使用**单一根对象**：`MeshFilter`、`Renderer`、非 Trigger `Collider`、`Rigidbody`、`PickPlaceTaskObject` 与运行时 Hi5 simple-object 组件都位于同一 GameObject。场景中不保留悬浮任务文字、蓝色起始垫或额外 `YCB_Visual` 子对象。
 
 ## 任务清单
 
@@ -64,7 +66,7 @@ Assets/Hi5_Interaction_SDK/Scenes/Vive/TableScene_Vive.unity
 ### 调整现有任务
 
 1. 在 Hierarchy 中只编辑 `PickPlaceTasks` 下的 `VRGlove_PickPlace_Tasks`。
-2. 移动起始物体、蓝色起始垫、目标容器和对应的 `*_Success_Zone`。
+2. 移动起始物体、目标容器和对应的 `*_Success_Zone`；默认布局不再包含蓝色起始垫或悬浮文字。
 3. 调整目标区时，同时检查其 `BoxCollider` 大小，避免视觉容器与成功体积不一致。
 4. 保存场景；物体当前世界位姿会在下一次进入 Play Mode 时成为复位位姿。
 5. 不要把 Hi5 专有 simple-object 组件手工保存到任务场景，它们由运行时桥接器统一添加。
@@ -77,7 +79,7 @@ Assets/Hi5_Interaction_SDK/Scenes/Vive/TableScene_Vive.unity
 |---|---|---|
 | Layer | `Hi5ObjectGrasp`，索引 11 | 进入 Hi5 抓取碰撞链路 |
 | Collider | 非 Trigger，形状贴近操作物体 | 指尖碰撞与目标区检测 |
-| Rigidbody | 初始 `isKinematic = true` | 由 Hi5 交互状态切换运动学状态 |
+| Rigidbody | `useGravity = true`、初始 `isKinematic = false`、`ContinuousDynamic` | 释放时参与重力和连续碰撞；被 Hi5 手持时暂时切换为运动学状态 |
 | `PickPlaceTaskObject` | 填写唯一 `Task Id`、`Hi5 Object Id`、`Hi5 Object Name` | 运行时注册、目标匹配和复位 |
 
 项目当前占用 Hi5 对象 ID `-1001` 至 `-1005`。新增对象应使用不重复的负数 ID，并为其设置与目标区完全一致的 `Task Id`。
@@ -117,7 +119,7 @@ Scenes/TaskSetups/BimanualTasks.unity
 原厂实体按钮发布 Hi5 `messageObjectReset`。`PickPlaceTaskSceneController` 收到消息后执行：
 
 1. 将五个任务物体恢复到进入 Play Mode 后记录的初始父节点、世界位置、旋转和缩放。
-2. 将刚体线速度、角速度清零，恢复 kinematic 状态并休眠。
+2. 将刚体线速度、角速度清零，恢复 `useGravity = true`、`isKinematic = false` 的动态释放状态并唤醒刚体。
 3. 清空累计完成集合，将所有目标底面恢复为待完成颜色。
 4. 保留原厂示例物体自身的复位行为。
 
@@ -151,7 +153,7 @@ PickPlaceTaskSceneSmokeTests.EditableTaskSceneBindsFiveTasksAndHi5ResetRestoresT
 
 在 Edit Mode 下按 `Ctrl+Shift+F7`，或执行 `Tools > VR Glove Data Capture > Task Setups > Run Pick Place Play Mode Test`，即可单独运行该回归测试。Console 汇总 `passed=1, failed=0, skipped=0` 表示通过。
 
-测试先加载持久化任务场景，再以 Additive 模式加载原厂场景，并验证 5 个任务对象完成 Hi5 绑定、5 个目标判据全部触发，以及 `messageObjectReset` 恢复位置、刚体状态、速度、任务进度和目标颜色。未安装本地 Hi5 Interaction SDK 时测试标记为忽略。
+测试先加载原厂场景，使 Hi5 manager 就绪，再以 Additive 模式加载持久化任务场景，并验证：没有悬浮文字、起始垫或重复渲染子对象；5 个对象 ID 唯一且完成 Hi5 绑定；全部对象具备动态重力和实体 Collider；马克杯保存的初始姿态直立；5 个目标判据全部触发；`messageObjectReset` 恢复位置、动态刚体状态、速度、任务进度和目标颜色。未安装本地 Hi5 Interaction SDK 时测试标记为忽略。
 
 ### 实机检查
 

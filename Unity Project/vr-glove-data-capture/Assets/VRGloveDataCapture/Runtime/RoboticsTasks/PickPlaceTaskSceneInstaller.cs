@@ -1,103 +1,18 @@
-using System.Collections;
-using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.SceneManagement;
 
 namespace VRGloveDataCapture.RoboticsTasks
 {
-    /// <summary>
-    /// Adds the project-owned robotics tasks to the vendor TableScene_Vive at runtime.
-    /// The proprietary scene asset remains untouched and outside version control.
-    /// </summary>
-    public sealed class PickPlaceTaskSceneInstaller : MonoBehaviour
-    {
-        private const string SupportedSceneName = "TableScene_Vive";
-        private const string InstallerName = "VRGlove_PickPlace_Task_Installer";
-        private readonly HashSet<int> installedSceneHandles = new HashSet<int>();
-
-        [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
-        private static void Install()
-        {
-            if (FindObjectOfType<PickPlaceTaskSceneInstaller>() != null)
-            {
-                return;
-            }
-
-            GameObject installerObject = new GameObject(InstallerName);
-            DontDestroyOnLoad(installerObject);
-            installerObject.AddComponent<PickPlaceTaskSceneInstaller>();
-        }
-
-        private void OnEnable()
-        {
-            SceneManager.sceneLoaded += OnSceneLoaded;
-            SceneManager.sceneUnloaded += OnSceneUnloaded;
-            Scene activeScene = SceneManager.GetActiveScene();
-            if (activeScene.IsValid() && activeScene.isLoaded)
-            {
-                OnSceneLoaded(activeScene, LoadSceneMode.Single);
-            }
-        }
-
-        private void OnDisable()
-        {
-            SceneManager.sceneLoaded -= OnSceneLoaded;
-            SceneManager.sceneUnloaded -= OnSceneUnloaded;
-        }
-
-        private void OnSceneUnloaded(Scene scene)
-        {
-            installedSceneHandles.Remove(scene.handle);
-        }
-
-        private void OnSceneLoaded(Scene scene, LoadSceneMode loadMode)
-        {
-            if (scene.name != SupportedSceneName || installedSceneHandles.Contains(scene.handle))
-            {
-                return;
-            }
-
-            StartCoroutine(BuildWhenHi5IsReady(scene));
-        }
-
-        private IEnumerator BuildWhenHi5IsReady(Scene scene)
-        {
-            const int maximumFramesToWait = 300;
-            for (int frame = 0; frame < maximumFramesToWait; frame++)
-            {
-                if (!scene.isLoaded)
-                {
-                    yield break;
-                }
-
-                if (Hi5RuntimeBridge.IsSimpleObjectManagerReady())
-                {
-                    if (GameObject.Find(PickPlaceTaskLayout.LayoutRootName) == null)
-                    {
-                        GameObject layout = PickPlaceTaskLayout.Build(scene);
-                        if (layout != null)
-                        {
-                            installedSceneHandles.Add(scene.handle);
-                            Debug.Log("[PickPlaceTasks] YCB pick-and-place task layout installed in " + scene.name + ".");
-                        }
-                    }
-                    else
-                    {
-                        installedSceneHandles.Add(scene.handle);
-                    }
-
-                    yield break;
-                }
-
-                yield return null;
-            }
-
-            Debug.LogError("[PickPlaceTasks] Hi5 simple-object manager did not become ready; task layout was not installed.");
-        }
-    }
-
+    /// <summary>Builds the project-owned, editable pick-and-place task scene.</summary>
     public static class PickPlaceTaskLayout
     {
+        private enum TaskColliderShape
+        {
+            Box,
+            Sphere,
+            CapsuleAlongModelZ
+        }
+
         public const string LayoutRootName = "VRGlove_PickPlace_Tasks";
 
         private const int Hi5ObjectLayer = 11;
@@ -105,7 +20,6 @@ namespace VRGloveDataCapture.RoboticsTasks
         private const int Hi5TriggerLayer = 13;
 
         private static readonly Color SlateColor = new Color(0.12f, 0.17f, 0.22f, 1f);
-        private static readonly Color WhiteColor = new Color(0.9f, 0.94f, 0.98f, 1f);
         private static readonly Color YellowColor = new Color(0.95f, 0.68f, 0.12f, 1f);
         private static readonly Color OrangeColor = new Color(0.95f, 0.36f, 0.1f, 1f);
         private static readonly Color RedColor = new Color(0.78f, 0.08f, 0.08f, 1f);
@@ -122,16 +36,12 @@ namespace VRGloveDataCapture.RoboticsTasks
 
             PickPlaceTaskSceneController controller = root.AddComponent<PickPlaceTaskSceneController>();
             Material structureMaterial = CreateMaterial("Task structure", SlateColor, 0.15f, 0.35f);
-            Material sourceMaterial = CreateMaterial("Pick source", new Color(0.16f, 0.55f, 0.78f, 1f), 0f, 0.2f);
-
-            CreateHeader(root.transform, origin + new Vector3(0f, 0.012f, 0.25f));
 
             int createdTaskCount = 0;
 
             // Task 1: a spherical object into a round bucket.
             Vector3 ballStart = origin + new Vector3(-0.66f, 0f, -0.10f);
             Vector3 bucketCenter = origin + new Vector3(-0.47f, 0f, 0.10f);
-            CreateSourcePad(root.transform, ballStart, sourceMaterial);
             Renderer bucketIndicator;
             PickPlaceTargetZone bucketZone = CreateBucket(
                 root.transform,
@@ -152,19 +62,17 @@ namespace VRGloveDataCapture.RoboticsTasks
                 surfaceY,
                 0.074f,
                 0.15f,
-                true,
+                TaskColliderShape.Sphere,
+                Quaternion.identity,
                 controller,
                 bindToHi5Immediately);
             if (ball != null)
             {
                 createdTaskCount++;
             }
-            CreateLabel(root.transform, "1  BALL  >  BUCKET", origin + new Vector3(-0.565f, 0.009f, -0.205f), WhiteColor, 0.011f);
-
             // Task 2: mug onto a marked coaster.
             Vector3 mugStart = origin + new Vector3(-0.27f, 0f, -0.10f);
             Vector3 coasterCenter = origin + new Vector3(-0.08f, 0f, 0.10f);
-            CreateSourcePad(root.transform, mugStart, sourceMaterial);
             PickPlaceTargetZone coasterZone = CreateCoaster(
                 root.transform,
                 coasterCenter,
@@ -182,19 +90,17 @@ namespace VRGloveDataCapture.RoboticsTasks
                 surfaceY,
                 0.117f,
                 0.24f,
-                false,
+                TaskColliderShape.Box,
+                Quaternion.Euler(-90f, 0f, 0f),
                 controller,
                 bindToHi5Immediately);
             if (mug != null)
             {
                 createdTaskCount++;
             }
-            CreateLabel(root.transform, "2  MUG  >  COASTER", origin + new Vector3(-0.175f, 0.009f, -0.205f), WhiteColor, 0.011f);
-
             // Task 3: cylindrical can into a rectangular tote.
             Vector3 canStart = origin + new Vector3(0.12f, 0f, -0.10f);
             Vector3 canBinCenter = origin + new Vector3(0.31f, 0f, 0.10f);
-            CreateSourcePad(root.transform, canStart, sourceMaterial);
             PickPlaceTargetZone canBinZone = CreateBin(
                 root.transform,
                 canBinCenter,
@@ -215,22 +121,19 @@ namespace VRGloveDataCapture.RoboticsTasks
                 surfaceY,
                 0.102f,
                 0.32f,
-                false,
+                TaskColliderShape.CapsuleAlongModelZ,
+                Quaternion.Euler(-90f, 0f, 0f),
                 controller,
                 bindToHi5Immediately);
             if (can != null)
             {
                 createdTaskCount++;
             }
-            CreateLabel(root.transform, "3  CAN  >  BIN", origin + new Vector3(0.215f, 0.009f, -0.205f), WhiteColor, 0.011f);
-
             // Task 4: two-color sorting, represented as two independently scored placements.
             Vector3 redStart = origin + new Vector3(0.50f, 0f, -0.12f);
             Vector3 blueStart = origin + new Vector3(0.66f, 0f, -0.12f);
             Vector3 redBinCenter = origin + new Vector3(0.50f, 0f, 0.10f);
             Vector3 blueBinCenter = origin + new Vector3(0.68f, 0f, 0.10f);
-            CreateSourcePad(root.transform, redStart, sourceMaterial);
-            CreateSourcePad(root.transform, blueStart, sourceMaterial);
             controller.RegisterTarget(CreateBin(
                 root.transform,
                 redBinCenter,
@@ -278,8 +181,6 @@ namespace VRGloveDataCapture.RoboticsTasks
             {
                 createdTaskCount++;
             }
-            CreateLabel(root.transform, "4  SORT  RED / BLUE", origin + new Vector3(0.59f, 0.009f, -0.225f), WhiteColor, 0.0105f);
-
             if (bindToHi5Immediately)
             {
                 controller.Initialize(createdTaskCount);
@@ -316,7 +217,8 @@ namespace VRGloveDataCapture.RoboticsTasks
             float surfaceY,
             float desiredLargestDimension,
             float mass,
-            bool sphericalCollider,
+            TaskColliderShape colliderShape,
+            Quaternion uprightRotation,
             PickPlaceTaskSceneController controller,
             bool bindToHi5Immediately)
         {
@@ -331,53 +233,60 @@ namespace VRGloveDataCapture.RoboticsTasks
             root.SetActive(false);
             root.transform.SetParent(parent, false);
             root.transform.position = new Vector3(horizontalStart.x, 0f, horizontalStart.z);
+            root.transform.rotation = uprightRotation;
             SetLayerRecursively(root, Hi5ObjectLayer);
 
-            GameObject visual = Object.Instantiate(source, root.transform);
-            visual.name = "YCB_Visual";
-            visual.transform.localPosition = Vector3.zero;
-            visual.transform.localRotation = Quaternion.identity;
-            visual.transform.localScale = Vector3.one;
-            SetLayerRecursively(visual, Hi5ObjectLayer);
-
-            Bounds visualBounds;
-            if (!TryGetRendererBounds(visual, out visualBounds))
+            MeshFilter sourceFilter = source.GetComponentInChildren<MeshFilter>(true);
+            MeshRenderer sourceRenderer = sourceFilter == null
+                ? null
+                : sourceFilter.GetComponent<MeshRenderer>();
+            if (sourceFilter == null || sourceFilter.sharedMesh == null || sourceRenderer == null)
             {
                 Object.Destroy(root);
-                Debug.LogError("[PickPlaceTasks] YCB model has no renderer: " + resourcePath);
+                Debug.LogError("[PickPlaceTasks] YCB model must contain one mesh renderer: " + resourcePath);
                 return null;
             }
 
-            float currentLargestDimension = Mathf.Max(visualBounds.size.x, visualBounds.size.y, visualBounds.size.z);
+            MeshFilter meshFilter = root.AddComponent<MeshFilter>();
+            meshFilter.sharedMesh = sourceFilter.sharedMesh;
+            MeshRenderer meshRenderer = root.AddComponent<MeshRenderer>();
+            meshRenderer.sharedMaterials = sourceRenderer.sharedMaterials;
+
+            Bounds meshBounds = sourceFilter.sharedMesh.bounds;
+            float currentLargestDimension = Mathf.Max(meshBounds.size.x, meshBounds.size.y, meshBounds.size.z);
             if (currentLargestDimension > 0.0001f)
             {
-                visual.transform.localScale *= desiredLargestDimension / currentLargestDimension;
+                root.transform.localScale = Vector3.one * (desiredLargestDimension / currentLargestDimension);
             }
 
-            TryGetRendererBounds(visual, out visualBounds);
-            Vector3 centerOffset = root.transform.InverseTransformVector(visualBounds.center - root.transform.position);
-            visual.transform.localPosition -= centerOffset;
-            TryGetRendererBounds(visual, out visualBounds);
-
             Collider physicalCollider;
-            if (sphericalCollider)
+            if (colliderShape == TaskColliderShape.Sphere)
             {
                 SphereCollider sphere = root.AddComponent<SphereCollider>();
-                sphere.center = root.transform.InverseTransformPoint(visualBounds.center);
-                sphere.radius = Mathf.Max(visualBounds.extents.x, visualBounds.extents.y, visualBounds.extents.z) * 0.96f;
+                sphere.center = meshBounds.center;
+                sphere.radius = Mathf.Max(meshBounds.extents.x, meshBounds.extents.y, meshBounds.extents.z) * 0.96f;
                 physicalCollider = sphere;
+            }
+            else if (colliderShape == TaskColliderShape.CapsuleAlongModelZ)
+            {
+                CapsuleCollider capsule = root.AddComponent<CapsuleCollider>();
+                capsule.center = meshBounds.center;
+                capsule.direction = 2;
+                capsule.radius = Mathf.Max(meshBounds.extents.x, meshBounds.extents.y) * 0.94f;
+                capsule.height = Mathf.Max(meshBounds.size.z * 0.96f, capsule.radius * 2f);
+                physicalCollider = capsule;
             }
             else
             {
                 BoxCollider box = root.AddComponent<BoxCollider>();
-                box.center = root.transform.InverseTransformPoint(visualBounds.center);
-                box.size = visualBounds.size * 0.94f;
+                box.center = meshBounds.center;
+                box.size = meshBounds.size * 0.94f;
                 physicalCollider = box;
             }
 
             root.transform.position = new Vector3(
                 horizontalStart.x,
-                surfaceY + physicalCollider.bounds.extents.y + 0.008f,
+                surfaceY + physicalCollider.bounds.extents.y + 0.012f,
                 horizontalStart.z);
 
             ConfigureRigidbody(root, mass);
@@ -445,22 +354,9 @@ namespace VRGloveDataCapture.RoboticsTasks
             body.drag = 0.5f;
             body.angularDrag = 0.08f;
             body.useGravity = true;
-            body.isKinematic = true;
+            body.isKinematic = false;
             body.interpolation = RigidbodyInterpolation.Interpolate;
-            body.collisionDetectionMode = CollisionDetectionMode.ContinuousSpeculative;
-        }
-
-        private static void CreateSourcePad(Transform parent, Vector3 center, Material material)
-        {
-            CreatePrimitivePart(
-                parent,
-                "Pick_Source_Pad",
-                PrimitiveType.Cylinder,
-                center + new Vector3(0f, 0.004f, 0f),
-                new Vector3(0.13f, 0.004f, 0.13f),
-                Quaternion.identity,
-                material,
-                Hi5PlaneLayer);
+            body.collisionDetectionMode = CollisionDetectionMode.ContinuousDynamic;
         }
 
         private static PickPlaceTargetZone CreateBucket(
@@ -646,26 +542,6 @@ namespace VRGloveDataCapture.RoboticsTasks
             return part;
         }
 
-        private static void CreateHeader(Transform parent, Vector3 position)
-        {
-            CreateLabel(parent, "ROBOT PICK & PLACE BENCHMARKS     RESET: SCENE BUTTON / F8", position, YellowColor, 0.0105f);
-        }
-
-        private static void CreateLabel(Transform parent, string text, Vector3 position, Color color, float characterSize)
-        {
-            GameObject labelObject = new GameObject("Task_Label_" + text);
-            labelObject.transform.SetParent(parent, false);
-            labelObject.transform.position = position;
-            labelObject.transform.rotation = Quaternion.Euler(90f, 0f, 0f);
-            TextMesh label = labelObject.AddComponent<TextMesh>();
-            label.text = text;
-            label.anchor = TextAnchor.MiddleCenter;
-            label.alignment = TextAlignment.Center;
-            label.characterSize = characterSize;
-            label.fontSize = 48;
-            label.color = color;
-        }
-
         private static Material CreateMaterial(string name, Color color, float metallic, float smoothness)
         {
             Shader shader = Shader.Find("Standard");
@@ -675,23 +551,6 @@ namespace VRGloveDataCapture.RoboticsTasks
             material.SetFloat("_Metallic", metallic);
             material.SetFloat("_Glossiness", smoothness);
             return material;
-        }
-
-        private static bool TryGetRendererBounds(GameObject root, out Bounds bounds)
-        {
-            Renderer[] renderers = root.GetComponentsInChildren<Renderer>(true);
-            if (renderers.Length == 0)
-            {
-                bounds = new Bounds();
-                return false;
-            }
-
-            bounds = renderers[0].bounds;
-            for (int index = 1; index < renderers.Length; index++)
-            {
-                bounds.Encapsulate(renderers[index].bounds);
-            }
-            return true;
         }
 
         private static void SetLayerRecursively(GameObject root, int layer)

@@ -111,6 +111,31 @@ namespace VRGloveDataCapture.RoboticsTasks
             return interfaceType != null && target.GetComponent(interfaceType) != null;
         }
 
+        internal static bool IsRegisteredSimpleObject(GameObject target, int objectId)
+        {
+            Type managerType = FindType("Hi5_Interaction_Core.Hi5_Interaction_Simple_Object_Manager");
+            Type itemType = FindType("Hi5_Interaction_Core.Hi5_Glove_Interaction_Simple_Item");
+            MethodInfo getter = managerType == null
+                ? null
+                : managerType.GetMethod("Get_ItemId", BindingFlags.Public | BindingFlags.Static);
+            if (getter == null || itemType == null || target == null)
+            {
+                return false;
+            }
+
+            try
+            {
+                object registered = getter.Invoke(null, new object[] { objectId });
+                UnityEngine.Object registeredObject = registered as UnityEngine.Object;
+                UnityEngine.Object targetObject = target.GetComponent(itemType) as UnityEngine.Object;
+                return registeredObject != null && registeredObject == targetObject;
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
         internal static ResetSubscription RegisterResetCallback(object target, string methodName)
         {
             Type messageType = FindType("Hi5_Interaction_Core.Hi5_Interaction_Message");

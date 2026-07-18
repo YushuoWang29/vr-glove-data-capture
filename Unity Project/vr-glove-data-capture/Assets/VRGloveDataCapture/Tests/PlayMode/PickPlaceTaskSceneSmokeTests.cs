@@ -26,18 +26,21 @@ namespace VRGloveDataCapture.Tests
                 Assert.Ignore("Local Hi5 Interaction SDK scene is not installed.");
             }
 
-            AsyncOperation taskLoadOperation = EditorSceneManager.LoadSceneAsyncInPlayMode(
-                TaskScenePath,
+            // The editor workspace opens the vendor scene before Play Mode and
+            // keeps the project-owned task scene active. Mirror that lifecycle:
+            // the Hi5 managers must exist before the task controller starts.
+            AsyncOperation baseLoadOperation = EditorSceneManager.LoadSceneAsyncInPlayMode(
+                VendorScenePath,
                 new LoadSceneParameters(LoadSceneMode.Single));
-            while (!taskLoadOperation.isDone)
+            while (!baseLoadOperation.isDone)
             {
                 yield return null;
             }
 
-            AsyncOperation baseLoadOperation = EditorSceneManager.LoadSceneAsyncInPlayMode(
-                VendorScenePath,
+            AsyncOperation taskLoadOperation = EditorSceneManager.LoadSceneAsyncInPlayMode(
+                TaskScenePath,
                 new LoadSceneParameters(LoadSceneMode.Additive));
-            while (!baseLoadOperation.isDone)
+            while (!taskLoadOperation.isDone)
             {
                 yield return null;
             }
@@ -67,16 +70,69 @@ namespace VRGloveDataCapture.Tests
             PickPlaceTargetZone[] targetZones = UnityEngine.Object.FindObjectsOfType<PickPlaceTargetZone>();
             Assert.AreEqual(5, taskObjects.Length, "Expected five independently scored task objects.");
             Assert.AreEqual(5, targetZones.Length, "Expected five target volumes.");
+            Assert.AreEqual(0, layoutRoot.GetComponentsInChildren<TextMesh>(true).Length,
+                "The editable task area must not contain floating instruction text.");
+            Assert.IsNull(FindChildByName(layoutRoot.transform, "Pick_Source_Pad"),
+                "Legacy blue source pads must not remain under graspable objects.");
 
             Dictionary<PickPlaceTaskObject, Vector3> startPositions =
                 new Dictionary<PickPlaceTaskObject, Vector3>();
+            FieldInfo capturedStartPositionField = typeof(PickPlaceTaskObject).GetField(
+                "startPosition",
+                BindingFlags.NonPublic | BindingFlags.Instance);
             Dictionary<PickPlaceTargetZone, Color> readyColors =
                 new Dictionary<PickPlaceTargetZone, Color>();
+            HashSet<string> uniqueTaskIds = new HashSet<string>();
+            HashSet<int> uniqueHi5Ids = new HashSet<int>();
             for (int index = 0; index < taskObjects.Length; index++)
             {
                 PickPlaceTaskObject taskObject = taskObjects[index];
-                startPositions.Add(taskObject, taskObject.transform.position);
+                startPositions.Add(taskObject, (Vector3)capturedStartPositionField.GetValue(taskObject));
+                Assert.IsTrue(uniqueTaskIds.Add(taskObject.TaskId),
+                    "Duplicate task id " + taskObject.TaskId + " creates ambiguous scoring.");
+                Assert.IsTrue(uniqueHi5Ids.Add(taskObject.Hi5ObjectId),
+                    "Duplicate Hi5 id " + taskObject.Hi5ObjectId + " can cause remote grabbing.");
+
+                Rigidbody body = taskObject.GetComponent<Rigidbody>();
+                Assert.IsNotNull(body, taskObject.name + " has no Rigidbody.");
+                Assert.IsTrue(body.useGravity, taskObject.name + " does not use gravity.");
+                Assert.IsFalse(body.isKinematic, taskObject.name + " is not dynamic while released.");
+                Collider physicalCollider = taskObject.GetComponent<Collider>();
+                Assert.IsNotNull(physicalCollider, taskObject.name + " has no physical collider.");
+                Assert.IsFalse(physicalCollider.isTrigger, taskObject.name + " uses a trigger instead of a physical collider.");
+                Assert.IsNotNull(taskObject.GetComponent<Renderer>(),
+                    taskObject.name + " renderer is detached from its physics/grab root.");
+                Assert.AreEqual(1, taskObject.GetComponentsInChildren<Renderer>(true).Length,
+                    taskObject.name + " has a duplicate or residual visual renderer.");
             }
+
+            PickPlaceTaskObject mug = Array.Find(taskObjects, item => item.name == "YCB_Mug");
+            Assert.IsNotNull(mug, "The YCB mug is missing.");
+            FieldInfo capturedStartRotationField = typeof(PickPlaceTaskObject).GetField(
+                "startRotation",
+                BindingFlags.NonPublic | BindingFlags.Instance);
+            Quaternion mugStartRotation = (Quaternion)capturedStartRotationField.GetValue(mug);
+            Assert.Less(Quaternion.Angle(mugStartRotation, Quaternion.Euler(-90f, 0f, 0f)), 0.1f,
+                "The mug's authored start pose is not in its upright model orientation.");
+
+            Type visiblePalmType = FindType("Hi5_Interaction_Core.Hi5_Hand_Palm");
+            Component visiblePalm = visiblePalmType == null
+                ? null
+                : UnityEngine.Object.FindObjectOfType(visiblePalmType) as Component;
+            Assert.IsNotNull(visiblePalm, "The vendor visible-hand palm was not found.");
+            PickPlaceTaskObject holdPhysicsProbe = taskObjects[0];
+            Transform releasedParent = holdPhysicsProbe.transform.parent;
+            Rigidbody holdPhysicsBody = holdPhysicsProbe.GetComponent<Rigidbody>();
+            holdPhysicsProbe.transform.SetParent(visiblePalm.transform, true);
+            yield return new WaitForFixedUpdate();
+            Assert.IsTrue(holdPhysicsBody.isKinematic,
+                "A task object parented to the Hi5 palm must be kinematic while held.");
+            holdPhysicsProbe.transform.SetParent(releasedParent, true);
+            yield return new WaitForFixedUpdate();
+            Assert.IsFalse(holdPhysicsBody.isKinematic,
+                "A task object released from the Hi5 palm must return to dynamic physics.");
+            Assert.IsTrue(holdPhysicsBody.useGravity,
+                "A task object released from the Hi5 palm must retain gravity.");
 
             FieldInfo zoneTaskIdField = typeof(PickPlaceTargetZone).GetField(
                 "taskId",
@@ -129,14 +185,14 @@ namespace VRGloveDataCapture.Tests
             }
 
             Assert.IsTrue(DispatchHi5Reset(), "The Hi5 message bus could not publish messageObjectReset.");
-            yield return null;
 
             foreach (KeyValuePair<PickPlaceTaskObject, Vector3> entry in startPositions)
             {
                 Rigidbody body = entry.Key.GetComponent<Rigidbody>();
                 Assert.Less(Vector3.Distance(entry.Value, entry.Key.transform.position), 0.0001f,
                     entry.Key.name + " did not return to its captured start position.");
-                Assert.IsTrue(body.isKinematic, entry.Key.name + " did not restore its kinematic reset state.");
+                Assert.IsFalse(body.isKinematic, entry.Key.name + " did not restore its dynamic released state.");
+                Assert.IsTrue(body.useGravity, entry.Key.name + " lost gravity after reset.");
                 Assert.Less(body.velocity.sqrMagnitude, 0.000001f, entry.Key.name + " retained linear velocity.");
                 Assert.Less(body.angularVelocity.sqrMagnitude, 0.000001f, entry.Key.name + " retained angular velocity.");
             }
@@ -149,6 +205,20 @@ namespace VRGloveDataCapture.Tests
                     0.001f,
                     entry.Key.name + " did not restore its ready color.");
             }
+        }
+
+        private static Transform FindChildByName(Transform root, string objectName)
+        {
+            Transform[] children = root.GetComponentsInChildren<Transform>(true);
+            for (int index = 0; index < children.Length; index++)
+            {
+                if (children[index].name == objectName)
+                {
+                    return children[index];
+                }
+            }
+
+            return null;
         }
 
         private static bool DispatchHi5Reset()

@@ -31,9 +31,10 @@ Assets/VRGloveDataCapture/Runtime/MixedReality/
 3. 打开 `Enable Camera`。
 4. 按 SteamVR 提示执行 `Restart SteamVR`。
 5. 先用 SteamVR 自带 Room View 验证摄像头确实工作。
-6. 启动 Unity Play Mode，等待 Console 出现 `Passthrough is ready ... press P to toggle it`。这只表示组件安装完成，不代表摄像头已经出帧。
-7. 按 `P` 开启透视，观察 Console 状态依次进入 `WaitingForSteamVr`、`WaitingForFrame` 和 `Streaming`。
-8. 以 `Passthrough Streaming: LIVE: VIVE tracked-camera frames are being composited (宽x高)` 作为**软件已经收到连续相机帧**的判据；同时确认真实画面在背景、虚拟手和交互物品在前景。
+6. 等待 SteamVR 状态变为 **Ready**，在 Unity 执行 `Tools > VR Glove Data Capture > VR Runtime > Validate SteamVR and HMD`。
+7. 检查通过后启动 Unity Play Mode，等待 Console 出现 `Passthrough is ready ... press P to toggle it`。这只表示组件安装完成，不代表摄像头已经出帧。
+8. 按 `P` 或在完整校准后注视 **PASSTHROUGH**，观察状态依次进入 `WaitingForSteamVr`、`WaitingForFrame` 和 `Streaming`。
+9. 以 `Passthrough Streaming: LIVE: VIVE tracked-camera frames are being composited (宽x高)` 作为**软件已经收到连续相机帧**的判据；同时确认真实画面在背景、虚拟手和交互物品在前景。
 
 `SteamVrPassthroughEffect.SetPassthroughEnabled(bool)` 和 `TogglePassthrough()` 是公共方法，可直接连接 Unity UI 或后续 SteamVR Input Action，不依赖键盘。
 
@@ -48,6 +49,8 @@ Assets/VRGloveDataCapture/Runtime/MixedReality/
 | `Streaming` | 帧序号持续变化，代码正在合成真实视频 | Console 必须出现 `Passthrough Streaming: LIVE`；这是通过软件侧验收的必要条件 |
 | `FrameStalled` | 帧序号超过 1 秒未变化 | 关闭再开启透视；必要时重启 SteamVR |
 | `Error` | Shader 或组件初始化失败 | 检查 Unity Console 和项目导入完整性 |
+
+当 SteamVR 未初始化时，透视组件不会主动反复访问 `SteamVR.instance`；它保持 `WaitingForSteamVr` 并把相机获取重试限制为每 2 秒一次。这样可避免 OpenVR 失败后连续连接/断开 compositor 管道。此状态下应退出 Play Mode、等待 SteamVR Ready，再重新进入，而不是连续点击透视按钮。
 
 ## 技术边界
 

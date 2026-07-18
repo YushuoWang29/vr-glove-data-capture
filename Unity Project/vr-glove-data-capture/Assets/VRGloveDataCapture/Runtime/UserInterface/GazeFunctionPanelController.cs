@@ -573,7 +573,7 @@ namespace VRGloveDataCapture.UserInterface
 
         private static bool IsManagerCalibrationComplete()
         {
-            Type managerType = FindType("HI5_Manager_Thread");
+            Type managerType = FindType("HI5.HI5_Manager_Thread") ?? FindType("HI5_Manager_Thread");
             if (managerType == null)
             {
                 return false;

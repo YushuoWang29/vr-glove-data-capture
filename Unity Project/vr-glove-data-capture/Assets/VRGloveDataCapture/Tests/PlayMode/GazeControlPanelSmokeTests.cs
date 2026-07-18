@@ -70,21 +70,28 @@ namespace VRGloveDataCapture.Tests
             Assert.IsNotNull(FindSceneObject("Calibration"), "The vendor calibration state was removed.");
             Assert.IsNotNull(FindSceneObject("Btn_Calibrate"), "The original gaze calibration entry was removed.");
 
-            // Hardware-free test: unlock only the presentation layer, leaving the
-            // production calibration detector and native Hi5 state untouched.
-            MethodInfo setFeaturePanel = typeof(GazeFunctionPanelController).GetMethod(
-                "SetFeaturePanel",
+            // Hardware-free test: drive the real production completion detector
+            // through the vendor manager field instead of directly forcing UI state.
+            Type managerType = FindType("HI5.HI5_Manager_Thread");
+            Assert.IsNotNull(managerType, "The namespaced Hi5 calibration manager type is unavailable.");
+            MethodInfo managerInstance = managerType.GetMethod(
+                "Instance",
+                BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static);
+            object manager = managerInstance == null ? null : managerInstance.Invoke(null, null);
+            Assert.IsNotNull(manager, "The Hi5 calibration manager instance is unavailable.");
+            FieldInfo completionField = managerType.GetField(
+                "IsCalibrationComplete",
+                BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
+            Assert.IsNotNull(completionField, "The Hi5 calibration completion field is unavailable.");
+            bool originalCompletion = (bool)completionField.GetValue(manager);
+            completionField.SetValue(manager, true);
+            MethodInfo updateCalibration = typeof(GazeFunctionPanelController).GetMethod(
+                "UpdateCalibrationTransition",
                 BindingFlags.NonPublic | BindingFlags.Instance);
-            MethodInfo setMenuState = typeof(GazeFunctionPanelController).GetMethod(
-                "SetMenuState",
-                BindingFlags.NonPublic | BindingFlags.Instance);
-            FieldInfo featureUnlocked = typeof(GazeFunctionPanelController).GetField(
-                "featureUnlocked",
-                BindingFlags.NonPublic | BindingFlags.Instance);
-            featureUnlocked.SetValue(controller, true);
-            setFeaturePanel.Invoke(controller, new object[] { true });
-            setMenuState.Invoke(controller, new object[] { "Main" });
+            updateCalibration.Invoke(controller, null);
             yield return null;
+            Assert.IsTrue(controller.IsFeaturePanelVisible,
+                "The function panel did not unlock after real Hi5 calibration completion.");
 
             GazeDwellButton[] gazeButtons = panelRoot.GetComponentsInChildren<GazeDwellButton>(true);
             Assert.AreEqual(6, gazeButtons.Length, "Expected six gaze-operated function controls.");
@@ -140,6 +147,7 @@ namespace VRGloveDataCapture.Tests
                 "The function panel remained visible over the original calibration flow.");
             Assert.IsTrue(FindSceneObject("Calibration").activeInHierarchy,
                 "Recalibration did not restore the original vendor calibration panel.");
+            completionField.SetValue(manager, originalCompletion);
         }
 
         private static GameObject FindSceneObject(string objectName)

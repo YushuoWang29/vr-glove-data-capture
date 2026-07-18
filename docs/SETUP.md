@@ -21,12 +21,13 @@
 
 ## 硬件到 Unity 的连接顺序
 
-1. 启动 SteamVR，确认头显、两个基站和两个 Tracker 均为绿色。
+1. 启动 SteamVR，确认头显、两个基站和两个 Tracker 均为绿色，并等待状态显示 **Ready**。
 2. 启动 Hi5 手套并确认厂商运行时已识别左右手。
-3. 在 Unity 中打开 `Assets/NoitomHi5/Scenes/Vive/Calibration.unity`。
-4. 进入 Play Mode，佩戴头显，按厂商示例中的注视流程完成 V-pose 校准。
-5. 完成校准后加载 Hi5 Interaction SDK 示例场景，验证左右手位置、姿态、抓取和碰撞。
-6. 在此基线上启用 `VRGloveDataCapture` 组件；功能配置见对应设计文档。
+3. 在 Unity 执行 `Tools > VR Glove Data Capture > VR Runtime > Validate SteamVR and HMD`，确认 OpenVR 与 HMD 均已就绪。
+4. 在 Unity 中打开 `Assets/NoitomHi5/Scenes/Vive/Calibration.unity`。
+5. 进入 Play Mode，佩戴头显，按厂商示例中的注视流程完成 V-pose 校准。
+6. 完成校准后加载 Hi5 Interaction SDK 示例场景，验证左右手位置、姿态、抓取和碰撞。
+7. 在此基线上启用 `VRGloveDataCapture` 组件；功能配置见对应设计文档。
 
 ## 扩展功能快速验证
 
@@ -47,6 +48,7 @@
 ## 常见故障边界
 
 - `Assembly-CSharp-Editor`/Burst 解析失败通常说明 Unity 版本或 SDK 编译链不匹配；本项目固定使用 Unity 2019.4.18f1。
+- 若 Play Mode 已进入但头显没有 Unity 画面，先退出 Play Mode；OpenVR `Not Initialized (109)` 表示进入时 SteamVR 尚未就绪。等待 SteamVR Ready，并通过项目的 VR Runtime 验证菜单后再启动。项目会对任务 Scene 和原厂交互 Scene 自动执行这一预检。
 - Tracker 已在 SteamVR 中上线但手的位置错误时，应先重新运行厂商 V-pose 校准，而不是修改模型骨骼。
 - 透视功能依赖 SteamVR 相机权限、VIVE Pro 2 前置摄像头和 OpenVR Tracked Camera 接口，不能由 Hi5 SDK 替代。
 - `Passthrough is ready` 只表示组件已装到相机；只有 `Passthrough Streaming: LIVE` 才表示 OpenVR 已返回连续相机帧。

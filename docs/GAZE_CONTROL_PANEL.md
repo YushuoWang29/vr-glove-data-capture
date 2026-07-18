@@ -16,6 +16,8 @@
 4. 完整 P-pose 完成后，系统自动返回主窗口并显示 **VR GLOVE CONTROL CENTER**。
 5. 注视任一功能按钮并保持视线，直到原厂圆形进度完成。
 
+功能按钮**不会在校准前显示**。运行时控制器直接读取厂商完整类型 `HI5.HI5_Manager_Thread.IsCalibrationComplete`，同时保留对旧无命名空间版本的兼容；因此完成 P-pose 后，即使厂商菜单状态已经从 `Finish` 返回主页面，面板仍能可靠识别校准完成。
+
 驻留等待时间和填充时间直接沿用当前场景中原厂 `SelectionRadial` 的序列化配置，不在项目扩展中另设第二套计时器。`TableScene_Vive` 当前配置为约 **0.5 秒等待 + 1.0 秒填充**。
 
 ### 重新校准
@@ -102,7 +104,7 @@ GazeControlPanelSmokeTests.PanelPreservesCalibrationAndRoutesVendorGazeToProject
 
 ### 完成校准后仍显示原厂主页面
 
-确认已经完成完整 **P-pose**，而不是只完成 V-pose 或 B-pose。功能切换以厂商 `CalibrationStateMachine.Finish` 或当前运行中的 `IsCalibrationComplete` 为依据。若 Console 没有出现 `[GazeControlPanel] Installed`，检查当前场景是否实际加载了原厂 `TableScene_Vive` 及其 UI 对象。
+确认已经完成完整 **P-pose**，而不是只完成 V-pose 或 B-pose。功能切换以厂商 `CalibrationStateMachine.Finish` 或 `HI5.HI5_Manager_Thread.IsCalibrationComplete` 为依据。若 Console 没有出现 `[GazeControlPanel] Installed`，检查当前场景是否实际加载了原厂 `TableScene_Vive` 及其 UI 对象；若日志已经出现 Installed 但完成 P-pose 后仍无按钮，应先确认当前 Git 分支包含本次命名空间修复，而不是重复校准。
 
 ### 看得到按钮但注视没有进度
 

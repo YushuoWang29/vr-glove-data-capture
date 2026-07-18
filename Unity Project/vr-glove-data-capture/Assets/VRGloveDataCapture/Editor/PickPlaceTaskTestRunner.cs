@@ -37,6 +37,7 @@ namespace VRGloveDataCapture.Editor
             ShortcutModifiers.Action | ShortcutModifiers.Shift)]
         public static void RunSmokeTest()
         {
+            VrPlayModePreflight.BeginAutomatedTestRun();
             Api.Execute(new ExecutionSettings(new Filter
             {
                 testMode = TestMode.PlayMode,
@@ -49,6 +50,7 @@ namespace VRGloveDataCapture.Editor
         [MenuItem("Tools/VR Glove Data Capture/Data Capture/Run Unified Capture Play Mode Test", priority = 150)]
         public static void RunCaptureSmokeTest()
         {
+            VrPlayModePreflight.BeginAutomatedTestRun();
             Api.Execute(new ExecutionSettings(new Filter
             {
                 testMode = TestMode.PlayMode,
@@ -65,6 +67,7 @@ namespace VRGloveDataCapture.Editor
             ShortcutModifiers.Action | ShortcutModifiers.Shift)]
         public static void RunAllProjectSmokeTests()
         {
+            VrPlayModePreflight.BeginAutomatedTestRun();
             Api.Execute(new ExecutionSettings(new Filter
             {
                 testMode = TestMode.PlayMode,
@@ -89,6 +92,7 @@ namespace VRGloveDataCapture.Editor
 
         public void RunFinished(ITestResultAdaptor result)
         {
+            VrPlayModePreflight.EndAutomatedTestRun();
             string summary =
                 "[PickPlaceTests] Finished: passed=" + result.PassCount +
                 ", failed=" + result.FailCount +

@@ -93,8 +93,12 @@ namespace VRGloveDataCapture.Editor
                 return;
             }
 
+            RebuildPickPlaceTaskSetupNonInteractive();
+        }
+
+        public static void RebuildPickPlaceTaskSetupNonInteractive()
+        {
             EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Single);
-            AssetDatabase.DeleteAsset(PickPlaceScenePath);
             GeneratePickPlaceScene();
             OpenPickPlaceTaskSetup();
         }
@@ -167,13 +171,21 @@ namespace VRGloveDataCapture.Editor
             isManagingScenes = true;
             Scene previousActiveScene = SceneManager.GetActiveScene();
             Scene taskScene = default(Scene);
+            bool reusedCurrentEmptyScene = false;
             try
             {
                 EnsureAssetFolder(TaskSetupDirectory);
                 EnsureAssetFolder(MaterialDirectory);
                 TaskMaterials materials = EnsureTaskMaterials();
 
-                taskScene = EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Additive);
+                reusedCurrentEmptyScene =
+                    previousActiveScene.IsValid() &&
+                    string.IsNullOrEmpty(previousActiveScene.path) &&
+                    previousActiveScene.rootCount == 0 &&
+                    SceneManager.sceneCount == 1;
+                taskScene = reusedCurrentEmptyScene
+                    ? previousActiveScene
+                    : EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Additive);
                 CreateMarker(taskScene, "Pick and Place Tasks");
                 GameObject layoutRoot = PickPlaceTaskLayout.Build(taskScene, false);
                 if (layoutRoot == null)
@@ -195,12 +207,12 @@ namespace VRGloveDataCapture.Editor
             }
             finally
             {
-                if (taskScene.IsValid() && taskScene.isLoaded)
+                if (!reusedCurrentEmptyScene && taskScene.IsValid() && taskScene.isLoaded)
                 {
                     EditorSceneManager.CloseScene(taskScene, true);
                 }
 
-                if (previousActiveScene.IsValid() && previousActiveScene.isLoaded)
+                if (!reusedCurrentEmptyScene && previousActiveScene.IsValid() && previousActiveScene.isLoaded)
                 {
                     SceneManager.SetActiveScene(previousActiveScene);
                 }
@@ -295,7 +307,6 @@ namespace VRGloveDataCapture.Editor
             return new TaskMaterials
             {
                 structure = EnsureMaterial("TaskStructure", new Color(0.12f, 0.17f, 0.22f, 1f), 0.15f, 0.35f),
-                source = EnsureMaterial("PickSource", new Color(0.16f, 0.55f, 0.78f, 1f), 0f, 0.2f),
                 yellow = EnsureMaterial("TargetYellow", new Color(0.95f, 0.68f, 0.12f, 1f), 0f, 0.25f),
                 orange = EnsureMaterial("TargetOrange", new Color(0.95f, 0.36f, 0.1f, 1f), 0.05f, 0.32f),
                 green = EnsureMaterial("TargetGreen", new Color(0.25f, 0.72f, 0.36f, 1f), 0f, 0.22f),
@@ -331,11 +342,7 @@ namespace VRGloveDataCapture.Editor
                 string objectName = renderer.gameObject.name;
                 Material material = null;
 
-                if (objectName == "Pick_Source_Pad")
-                {
-                    material = materials.source;
-                }
-                else if (objectName.StartsWith("Bucket_Wall_") || objectName.StartsWith("Bin_Wall_"))
+                if (objectName.StartsWith("Bucket_Wall_") || objectName.StartsWith("Bin_Wall_"))
                 {
                     material = materials.structure;
                 }
@@ -376,7 +383,6 @@ namespace VRGloveDataCapture.Editor
         private sealed class TaskMaterials
         {
             internal Material structure;
-            internal Material source;
             internal Material yellow;
             internal Material orange;
             internal Material green;

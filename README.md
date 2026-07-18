@@ -162,7 +162,7 @@ git checkout codex/gaze-control-panel
 1. 通过 Unity Hub 安装 **Unity `2019.4.18f1`**，包含 Windows Build Support。
 2. 安装并启动 SteamVR。
 3. 将 VIVE Pro 2、两个 Base Station 2.0 和两个 VIVE Tracker 3.0 配对并上线。
-4. 在 SteamVR 状态窗口确认头显、基站和 Tracker 均为绿色。
+4. 在 SteamVR 状态窗口确认头显、基站和 Tracker 均为绿色，并等待状态显示 **Ready**；不要在 SteamVR 仍为 `Connecting` 时进入 Unity Play Mode。
 
 ### 3. 打开 Unity 项目
 
@@ -220,6 +220,14 @@ Tools > VR Glove Data Capture > Task Setups > Open Pick Place Task Setup
 | `TableScene_Vive` | Hi5 原厂、本地导入 | 校准流程、虚拟手、状态面板、原厂物品、实体复位按钮 | 否 |
 | `PickPlaceTasks` | 本仓库 | YCB 任务物体、容器、目标区、任务控制器 | 是 |
 
+进入 Play Mode 前先执行：
+
+```text
+Tools > VR Glove Data Capture > VR Runtime > Validate SteamVR and HMD
+```
+
+只有弹窗显示 **SteamVR/OpenVR is ready and the HMD is connected** 后再按 Play。项目也会在进入 VR Scene 的 Play Mode 前自动执行同一检查；若 OpenVR 未就绪，会取消本次 Play 并给出处理顺序，避免 Unity 在无头显画面的状态下继续运行。仅做桌面调试时可执行一次性旁路菜单 `Allow Desktop-Only Play Once`。
+
 进入 Play Mode 后，项目会自动执行以下扩展：
 
 - 启用手指外展/内收模式。
@@ -228,7 +236,6 @@ Tools > VR Glove Data Capture > Task Setups > Open Pick Place Task Setup
 - 安装 `F9` VR 录像热键。
 - 安装独立于 Scene 的统一采集管理器；任务物体会自动加入物体轨迹，任务成功和复位会自动加入事件流。
 - 将场景中已经可见、可编辑的 YCB 任务物体注册到 Hi5 simple-object manager。
-- 将新增物体注册到 Hi5 simple-object manager。
 - 订阅场景原有的统一复位消息。
 - 完成原厂 V/B/P-pose 校准后，将原厂主窗口自动切换为注视功能控制中心。
 
@@ -341,11 +348,11 @@ PickPlaceTaskSceneSmokeTests.EditableTaskSceneBindsFiveTasksAndHi5ResetRestoresT
 
 可以直接按 `Ctrl+Shift+F7`，或执行 `Tools > VR Glove Data Capture > Task Setups > Run Pick Place Play Mode Test` 运行该测试。
 
-该测试会先加载项目自有任务场景，再叠加加载真实厂商场景，并验证：
+该测试会先加载真实厂商场景，使 Hi5 manager 完成初始化，再以 Additive 模式加载项目任务场景，并验证：
 
 1. 持久化场景包含 5 个可抓物体和 5 个目标区。
 2. 五项匹配放置均能触发成功。
-3. `messageObjectReset` 能恢复全部物体的位置和 kinematic 状态。
+3. `messageObjectReset` 能恢复全部物体的位置，并恢复启用重力的动态刚体状态。
 4. 刚体线速度与角速度归零。
 5. 任务进度和目标颜色恢复。
 
@@ -384,6 +391,10 @@ UnifiedCaptureSmokeTests.TrialFinalizesAtomicMachineReadableStreamsAndManifest
 ### SteamVR 中 Tracker 在线，但虚拟手位置错误
 
 重新运行 `Calibration.unity` 的 V-pose 对齐。Tracker 在线只表示设备可见，不表示手套坐标系已经与 Tracker 对齐。
+
+### 进入 Play Mode 后头显没有 Unity 画面
+
+先退出 Play Mode，等待 SteamVR 从 `Connecting` 变为 **Ready**，再执行 `Tools > VR Glove Data Capture > VR Runtime > Validate SteamVR and HMD`。检查通过后重新进入 Play Mode。项目现会阻止 OpenVR 未初始化、HMD 未连接时启动 VR Scene；诊断日志中的 `Not Initialized (109)` 表示 Unity 进入 Play 时 OpenVR 尚未完成初始化，而不是任务 Scene 或显示相机缺失。
 
 ### 按 `P` 后没有真实世界画面
 

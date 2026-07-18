@@ -57,6 +57,7 @@ namespace VRGloveDataCapture.MixedReality
         private DepthTextureMode originalDepthTextureMode;
         private uint lastFrameId;
         private float lastFrameTime;
+        private float nextAcquireAttemptTime;
         private PassthroughState state = PassthroughState.Disabled;
         private string status = "Passthrough is disabled.";
 
@@ -133,8 +134,14 @@ namespace VRGloveDataCapture.MixedReality
                 return;
             }
 
+            if (!acquired && Time.unscaledTime < nextAcquireAttemptTime)
+            {
+                return;
+            }
+
             if (!acquired && !TryAcquireStream())
             {
+                nextAcquireAttemptTime = Time.unscaledTime + 2.0f;
                 return;
             }
 
@@ -179,6 +186,7 @@ namespace VRGloveDataCapture.MixedReality
         public void SetPassthroughEnabled(bool value)
         {
             requested = value;
+            nextAcquireAttemptTime = 0.0f;
             if (!requested)
             {
                 ReleaseStream();
@@ -193,6 +201,13 @@ namespace VRGloveDataCapture.MixedReality
 
         private bool TryAcquireStream()
         {
+            if (SteamVR.initializedState != SteamVR.InitializedStates.InitializeSuccess)
+            {
+                SetState(PassthroughState.WaitingForSteamVr,
+                    "SteamVR is not initialized; camera acquisition is paused without forcing retries.");
+                return false;
+            }
+
             if (SteamVR.instance == null || OpenVR.TrackedCamera == null)
             {
                 SetState(PassthroughState.WaitingForSteamVr,
