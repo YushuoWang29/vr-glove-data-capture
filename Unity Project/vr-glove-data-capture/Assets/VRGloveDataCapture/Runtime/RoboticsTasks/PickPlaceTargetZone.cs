@@ -1,4 +1,5 @@
 using UnityEngine;
+using VRGloveDataCapture.Capture;
 
 namespace VRGloveDataCapture.RoboticsTasks
 {
@@ -61,6 +62,11 @@ namespace VRGloveDataCapture.RoboticsTasks
 
             completed = true;
             ApplyColor(new Color(0.2f, 0.9f, 0.32f, 1f));
+            CaptureEventBus.Publish(
+                "object_entered_target",
+                taskId,
+                taskObject.Hi5ObjectName,
+                "target=" + gameObject.name);
             if (controller != null)
             {
                 controller.MarkCompleted(taskId);

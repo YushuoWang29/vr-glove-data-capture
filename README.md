@@ -2,9 +2,9 @@
 
 基于 **Unity、HTC VIVE Pro 2、VIVE Tracker 3.0 与 Noitom Hi5 2.0 数据手套** 的手部运动采集和机器人操作示教项目。
 
-项目当前已经跑通从 SteamVR 设备上线、Hi5 手套接入、V-pose 校准、虚拟手驱动到桌面物体交互的完整流程，并在此基础上增加了手指运动学增强、VIVE 前置摄像头透视、VR 第一视角录像和机器人 pick-and-place 任务场景。
+项目当前已经跑通从 SteamVR 设备上线、Hi5 手套接入、V-pose 校准、虚拟手驱动到桌面物体交互的完整流程，并在此基础上增加了手指运动学增强、VIVE 前置摄像头透视、VR 第一视角录像、机器人 pick-and-place 任务场景和按 session/trial 管理的结构化同步数据采集。
 
-> - **当前推荐开发版本**：`codex/pick-place-task-scenes`
+> - **当前推荐开发版本**：`codex/unified-data-capture`
 > - **Unity 固定版本**：`2019.4.18f1`
 > - **主要运行方式**：Windows + SteamVR + Unity Editor Play Mode
 
@@ -20,15 +20,17 @@
 - 使用 Unity Recorder 在 Editor Play Mode 中录制 **VR 第一视角 MP4**。
 - 提供可在 **Scene View 直接编辑**的机器人操作任务场景，包括球入桶、杯放定位垫、罐入箱和颜色分类。
 - 将新增任务接入 Hi5 原场景的统一复位消息和实体复位按钮。
+- 提供 **统一实验数据采集**：导出手部骨骼、关节角、物体与头显位姿、Hi5 模块状态和任务事件，并与 trial 视频共享主机单调时间轴。
+- 提供 **session/trial 元数据管理**、操作员控制窗口、原子化文件收尾、SHA-256 校验和及可插拔的原始 IMU provider 接口。
 
 ### 当前尚未实现
 
-- 尚未将每个 IMU 的九轴原始数据导出为 CSV、ROS bag 或其他结构化格式。
-- 尚未实现完整关节轨迹、物体位姿、任务事件和视频之间的统一时间戳同步。
-- 尚未形成面向受试者实验的数据分段、匿名化、元数据和批量导出工具。
+- 随项目提供的 Hi5 Unity SDK **没有公开九轴原始向量 API**；在获得厂商/传输层原始流并实现 `IRawImuProvider` 前，manifest 会明确标记 `unavailable_vendor_api`，不会用姿态差分伪造 IMU 数据。
+- 当前同步属于 **单机软件时钟统一**；Hi5 原始硬件包时间戳与视频逐帧曝光时间尚不可得，不能宣称亚毫秒硬件同步。
+- 尚未提供 ROS bag/HDF5 批量转换器和跨 session 的数据集索引工具。
 - Windows Standalone Player 尚未完成与 Editor Play Mode 同等级别的硬件验证。
 
-因此，当前版本适合作为 **VR 手部交互、任务设计和示教采集的功能基线**；结构化运动数据记录器是后续开发的核心模块。
+因此，当前版本已经形成 **VR 手部交互、任务设计与结构化机器人示教采集基线**；后续关键工作是接入真正的九轴原始数据源、硬件时间戳以及批量数据集转换。
 
 ## 系统架构
 
@@ -53,7 +55,7 @@ flowchart LR
     subgraph Project["VRGloveDataCapture 原创扩展"]
         Finger["FingerKinematics<br/>外展/内收 + PIP–DIP 耦合"]
         MR["MixedReality<br/>VIVE 摄像头透视"]
-        Capture["Capture<br/>VR 视角 MP4"]
+        Capture["Capture<br/>session/trial + 多流 CSV + MP4"]
         Tasks["RoboticsTasks<br/>YCB 抓取任务 + 统一复位"]
     end
 
@@ -70,7 +72,8 @@ flowchart LR
     Scenes --> Tasks
     Finger --> HMD
     MR --> HMD
-    Capture --> Video["Recordings/*.mp4"]
+    Capture --> Dataset["Captures/participants/...<br/>CSV + events + manifest + MP4"]
+    Tasks --> Capture
     Tasks --> Demo["任务完成事件 / 场景复位"]
 ```
 
@@ -83,6 +86,8 @@ flowchart LR
 3. **不修改厂商示例 Scene**：项目任务保存在独立 `.unity` 场景；编辑器自动把原厂 `TableScene_Vive` 作为基础场景叠加加载。
 4. **统一复位消息**：新增任务订阅厂商的 `messageObjectReset`，与原有实体按钮共享同一复位链路。
 5. **资源可追溯**：YCB 子集保留对象 ID、下载归档哈希、文件哈希和 CC BY 4.0 署名信息。
+6. **统一时钟与原子化落盘**：一个采样时刻只读取一次单调时钟，多流共享 `sample_id`/`t_trial_ns`；录制中使用 `.partial`，正常结束后再生成 manifest、校验和与 `COMPLETE`。
+7. **原始值不造假**：解算后的骨骼/关节姿态与九轴原始 IMU 分流记录；缺少厂商原始接口时显式标记不可用。
 
 ## 主要功能
 
@@ -92,6 +97,7 @@ flowchart LR
 | **PIP–DIP 耦合** | 可选，需要在手骨骼根节点配置组件 | 按比例约束 DIP 屈伸，同时保留其他旋转分量 | [FINGER_KINEMATICS.md](docs/FINGER_KINEMATICS.md) |
 | **VIVE 视频透视** | Play Mode 按 `P` 开关，默认关闭 | 将 OpenVR Tracked Camera 视频合成到虚拟物体之后 | [MIXED_REALITY.md](docs/MIXED_REALITY.md) |
 | **VR 第一视角录像** | Editor Play Mode 按 `F9` 开始/停止 | `Recordings/vr_view_*.mp4` | [VR_VIEW_RECORDING.md](docs/VR_VIEW_RECORDING.md) |
+| **统一实验数据采集** | `Capture Control` 配置；Play Mode 按 `F12` 启停 trial、`F11` 标记 | `Captures/participants/<ID>/sessions/...` 下的 CSV、事件、manifest、校验和与同步 MP4 | [DATA_CAPTURE.md](docs/DATA_CAPTURE.md) |
 | **机器人抓取任务台** | 打开项目自有 `PickPlaceTasks` 场景，可在 Scene View 编辑 | 5 个可抓物体、5 个目标区及任务完成反馈 | [PICK_PLACE_TASKS.md](docs/PICK_PLACE_TASKS.md) |
 | **整场任务复位** | 拍下原场景复位按钮，或按 `F8` | 恢复物体姿态、刚体状态、速度、进度和目标颜色 | [PICK_PLACE_TASKS.md](docs/PICK_PLACE_TASKS.md) |
 
@@ -137,7 +143,7 @@ flowchart LR
 ```powershell
 git clone https://github.com/YushuoWang29/vr-glove-data-capture.git
 cd vr-glove-data-capture
-git checkout codex/pick-place-task-scenes
+git checkout codex/unified-data-capture
 ```
 
 默认 `main` 当前仍是初始化基线；在功能分支合并前，应使用上述推荐分支。
@@ -210,6 +216,7 @@ Tools > VR Glove Data Capture > Task Setups > Open Pick Place Task Setup
 - 启用手指外展/内收模式。
 - 在主相机上安装透视组件。
 - 安装 `F9` VR 录像热键。
+- 安装独立于 Scene 的统一采集管理器；任务物体会自动加入物体轨迹，任务成功和复位会自动加入事件流。
 - 将场景中已经可见、可编辑的 YCB 任务物体注册到 Hi5 simple-object manager。
 - 将新增物体注册到 Hi5 simple-object manager。
 - 订阅场景原有的统一复位消息。
@@ -220,9 +227,22 @@ Tools > VR Glove Data Capture > Task Setups > Open Pick Place Task Setup
 |---|---|---|
 | `P` | 开启/关闭 VIVE 视频透视 | Console 出现 `Passthrough Streaming: LIVE` 才表示收到连续相机帧 |
 | `F9` | 开始/停止 VR 第一视角录像 | `Recordings/` 中生成 MP4 |
+| `F12` | 开始/停止并最终化一个统一采集 trial | Console 出现 `TRIAL STARTED` / `TRIAL FINALIZED`，trial 目录出现 `COMPLETE` |
+| `F11` | 在活动 trial 中写入人工事件标记 | `events/events.csv` 出现 `manual_marker` |
 | `F8` | 发布全场复位消息 | 新增物体、任务进度和目标颜色恢复 |
 | `F7`（Edit Mode） | 运行 pick-and-place Play Mode 冒烟测试 | Console 出现 `passed=1, failed=0, skipped=0` |
 | 场景实体复位按钮 | 与 `F8` 相同的统一复位 | 原厂物体和新增任务物体同时恢复 |
+
+### 8. 采集结构化示教数据
+
+1. 执行 `Tools > VR Glove Data Capture > Capture Control`。
+2. 填写匿名 Participant ID、Session Label、Task ID 和 Condition。
+3. 保持 **Require Hi5 Skeleton** 开启；需要视频时保持 **Record VR View Video** 开启。
+4. 进入 Play Mode，确认控制窗口显示 Hi5 Bones 后按 `F12`。
+5. 完成任务，必要时按 `F11` 添加人工标记，再按 `F12` 收尾。
+6. 点击控制窗口的 **Open Latest Trial**，检查 `manifest.json`、`COMPLETE` 和所需数据流。
+
+完整目录、字段、时间戳语义、九轴 IMU 能力边界和质量检查见 [DATA_CAPTURE.md](docs/DATA_CAPTURE.md)。
 
 ## 项目目录
 
@@ -239,6 +259,7 @@ vr-glove-data-capture/
 │  ├─ FINGER_KINEMATICS.md         # 手指自由度与 PIP–DIP 耦合
 │  ├─ MIXED_REALITY.md             # VIVE 视频透视
 │  ├─ VR_VIEW_RECORDING.md         # VR 第一视角录像
+│  ├─ DATA_CAPTURE.md               # session/trial、多流数据、时间戳和数据字典
 │  ├─ PICK_PLACE_TASKS.md          # 机器人任务和复位机制
 │  └─ YCB_ASSET_MANIFEST.md        # YCB 来源、裁剪范围和哈希
 └─ Unity Project/
@@ -262,7 +283,7 @@ vr-glove-data-capture/
       └─ ProjectSettings/
 ```
 
-Unity 生成的 `Library`、`Temp`、`Logs`、`UserSettings`、构建输出和 `Recordings` 不进入 Git。
+Unity 生成的 `Library`、`Temp`、`Logs`、`UserSettings`、构建输出，以及实验产生的 `Captures`、`Recordings` 不进入 Git。
 
 ## 验证与测试
 
@@ -302,6 +323,14 @@ PickPlaceTaskSceneSmokeTests.EditableTaskSceneBindsFiveTasksAndHi5ResetRestoresT
 
 当前开发版本已经在 Unity `2019.4.18f1` 下通过资源验证和上述 Play Mode 测试。
 
+统一采集的端到端测试为：
+
+```text
+UnifiedCaptureSmokeTests.TrialFinalizesAtomicMachineReadableStreamsAndManifest
+```
+
+执行 `Tools > VR Glove Data Capture > Data Capture > Run Unified Capture Play Mode Test`。测试会使用并清理专用的 `AUTOMATED_CAPTURE_TEST` 目录，验证主要数据流、事件、manifest、SHA-256、`COMPLETE` 和 `.partial` 清理。
+
 ## 常见问题
 
 ### Unity 报 `Assembly-CSharp-Editor` 或 Mono.Cecil 解析失败
@@ -320,6 +349,10 @@ PickPlaceTaskSceneSmokeTests.EditableTaskSceneBindsFiveTasksAndHi5ResetRestoresT
 
 确认当前处于 **Unity Editor Play Mode**，并让 Game View 获得键盘焦点。录像功能依赖 Editor-only 的 Unity Recorder，不是 Windows Player 录像器。
 
+### 按 `F12` 无法开始统一采集
+
+先打开 `Capture Control` 查看错误状态。默认会拒绝在没有 Hi5 骨骼的情况下开始，避免生成看似完整但没有手部轨迹的数据；确认已经加载 VIVE 基础场景、完成校准并进入 Play Mode。只有调试采集文件结构时才关闭 **Require Hi5 Skeleton**。
+
 ### 打开 `TableScene_Vive` 没看到机器人任务台
 
 这是双场景结构的预期行为。请打开 `Assets/VRGloveDataCapture/Scenes/TaskSetups/PickPlaceTasks.unity`，或按 `F6`。编辑器会自动叠加加载原厂 `TableScene_Vive`；如果未加载，先运行资源验证菜单检查本地 SDK 是否完整。
@@ -333,6 +366,7 @@ PickPlaceTaskSceneSmokeTests.EditableTaskSceneBindsFiveTasksAndHi5ResetRestoresT
 - 受试者身份信息和原始实验记录。
 - 大规模九轴传感器数据、视频和中间导出文件。
 - 标定导出、缓存和临时采集文件。
+- 仓库根目录 `Captures/` 下的 session/trial、CSV、事件、manifest、校验和与视频。
 - 未经授权的厂商 SDK、PDF、安装包和示例构建。
 
 仓库只保存源码、配置、数据结构、可再分发的小型测试资源以及明确授权的数据集子集。

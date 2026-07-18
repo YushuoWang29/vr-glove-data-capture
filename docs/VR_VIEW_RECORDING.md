@@ -16,6 +16,15 @@
 | 音频 | Unity 场景音频 | 不自动采集 Windows 麦克风 |
 | 输出目录 | `Unity Project/vr-glove-data-capture/Recordings/` | 已被 Git 忽略，不会误提交实验视频 |
 
+## 两种录制模式
+
+| 模式 | 启停入口 | 视频位置 | 时间标签 |
+|---|---|---|---|
+| **独立录像** | Play Mode 按 `F9` | `Unity Project/vr-glove-data-capture/Recordings/vr_view_*.mp4` | 只有文件名时间 |
+| **统一 trial 录像** | `Capture Control` 启用视频后按 `F12` | `Captures/.../trial-XXXX/video/vr_view.mp4` | `events.csv` 写入录制启停的统一单调时间戳 |
+
+正式实验优先使用**统一 trial 录像**。活动 trial 已经接管同步视频时，F9 会被锁定，防止操作者误停视频造成数据和视频时长不一致。完整数据结构见 [DATA_CAPTURE.md](DATA_CAPTURE.md)。
+
 ## 使用步骤
 
 1. 打开 Game View，并进入现有 Hi5 示例场景的 Play Mode。
@@ -27,6 +36,8 @@
 7. Console 出现 `VR VIEW RECORDING SAVED` 后，打开日志给出的绝对路径检查视频。
 
 也可使用 Unity 菜单 `Tools > VR Glove Data Capture > Toggle VR View Recording` 开始或停止录制。退出 Play Mode 时，代码会主动停止录像并完成文件封装。
+
+统一 trial 模式不需要单独按 F9：在 `Capture Control` 勾选 **Record VR View Video** 后，F12 会先创建 trial 数据目录并启动 Recorder；停止时先封装 MP4，再最终化 CSV、manifest 和校验和。
 
 ## 验收标准
 
@@ -44,13 +55,14 @@
 - Game View 的镜像模式由 Unity、OpenVR 和当前窗口设置共同决定，可能显示单眼、裁剪视图或并排视图；正式实验前应固定 Game View 布局并记录配置。
 - MP4 包含 Unity 场景音频，但不保证包含实验员语音。需要语音时，应使用独立音频采集并用共同时间标记同步。
 - 录像会消耗 GPU、CPU 和磁盘带宽。正式采集前应测试持续录像时长、掉帧和文件大小，并将视频存放在获批准的研究数据位置。
-- `Recordings/` 被 Git 忽略；研究原始视频不应提交到公开仓库。
+- `Recordings/` 与 `Captures/` 均被 Git 忽略；研究原始视频不应提交到公开仓库。
 
 ## 故障诊断
 
 | 现象 | 原因 | 处理 |
 |---|---|---|
 | 按 `F9` 无日志 | Game View 未获得焦点，或不在 Play Mode | 点击 Game View 后重试，或使用 Tools 菜单 |
+| trial 中按 `F9` 提示被锁定 | F12 统一采集正在管理同步视频 | 使用 F12 或 Capture Control 正常结束整个 trial |
 | 提示仅 Editor 可用 | 当前运行的是 Windows build | 回到 Unity Editor Play Mode；本版本未实现 Player 端编码器 |
 | 开始失败 | Recorder 包未加载、Game View 无有效输出或编码器初始化失败 | 等待 Package Manager 完成，检查 Console 第一条异常 |
 | 视频没有透视背景 | 录像开始前透视未进入 `Streaming` | 先完成 `P` 键透视验收，再开始录像 |

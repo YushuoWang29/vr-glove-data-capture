@@ -2,6 +2,7 @@ using System;
 using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
+using VRGloveDataCapture.Capture;
 
 namespace VRGloveDataCapture.RoboticsTasks
 {
@@ -103,9 +104,19 @@ namespace VRGloveDataCapture.RoboticsTasks
             }
 
             Debug.Log("[PickPlaceTasks] Completed " + taskId + " (" + completedTasks.Count + "/" + totalTasks + ").");
+            CaptureEventBus.Publish(
+                "task_completed",
+                taskId,
+                string.Empty,
+                "completed=" + completedTasks.Count + ";total=" + totalTasks);
             if (completedTasks.Count == totalTasks)
             {
                 Debug.Log("[PickPlaceTasks] All pick-and-place tasks completed. Press the scene reset button or F8 to restart.");
+                CaptureEventBus.Publish(
+                    "task_set_completed",
+                    "pick-place",
+                    string.Empty,
+                    "total=" + totalTasks);
             }
         }
 
@@ -158,6 +169,11 @@ namespace VRGloveDataCapture.RoboticsTasks
             }
 
             Debug.Log("[PickPlaceTasks] Scene objects and task progress reset.");
+            CaptureEventBus.Publish(
+                "scene_reset",
+                "pick-place",
+                string.Empty,
+                "objects=" + taskObjects.Count + ";targets=" + targetZones.Count);
         }
     }
 }

@@ -11,6 +11,9 @@ namespace VRGloveDataCapture.Editor
         private const string SmokeTestName =
             "VRGloveDataCapture.Tests.PickPlaceTaskSceneSmokeTests." +
             "EditableTaskSceneBindsFiveTasksAndHi5ResetRestoresTheirPoses";
+        private const string CaptureSmokeTestName =
+            "VRGloveDataCapture.Tests.UnifiedCaptureSmokeTests." +
+            "TrialFinalizesAtomicMachineReadableStreamsAndManifest";
 
         private static readonly TestRunnerApi Api;
 
@@ -30,6 +33,18 @@ namespace VRGloveDataCapture.Editor
             }));
 
             Debug.Log("[PickPlaceTests] Started Play Mode smoke test: " + SmokeTestName);
+        }
+
+        [MenuItem("Tools/VR Glove Data Capture/Data Capture/Run Unified Capture Play Mode Test", priority = 150)]
+        public static void RunCaptureSmokeTest()
+        {
+            Api.Execute(new ExecutionSettings(new Filter
+            {
+                testMode = TestMode.PlayMode,
+                testNames = new[] { CaptureSmokeTestName }
+            }));
+
+            Debug.Log("[DataCaptureTests] Started Play Mode smoke test: " + CaptureSmokeTestName);
         }
     }
 
