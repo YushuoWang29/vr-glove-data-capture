@@ -14,6 +14,9 @@ namespace VRGloveDataCapture.Editor
         private const string CaptureSmokeTestName =
             "VRGloveDataCapture.Tests.UnifiedCaptureSmokeTests." +
             "TrialFinalizesAtomicMachineReadableStreamsAndManifest";
+        private const string AdaptiveContactSmokeTestName =
+            "VRGloveDataCapture.Tests.AdaptiveHandContactSmokeTests." +
+            "SolverAutoInstallsOnBothVisibleHandsWithoutWritingSourceBones";
 
         private static readonly TestRunnerApi Api;
 
@@ -45,6 +48,23 @@ namespace VRGloveDataCapture.Editor
             }));
 
             Debug.Log("[DataCaptureTests] Started Play Mode smoke test: " + CaptureSmokeTestName);
+        }
+
+        [MenuItem("Tools/VR Glove Data Capture/Run All Project Play Mode Tests _F10", priority = 200)]
+        public static void RunAllProjectSmokeTests()
+        {
+            Api.Execute(new ExecutionSettings(new Filter
+            {
+                testMode = TestMode.PlayMode,
+                testNames = new[]
+                {
+                    SmokeTestName,
+                    CaptureSmokeTestName,
+                    AdaptiveContactSmokeTestName
+                }
+            }));
+
+            Debug.Log("[VRGloveTests] Started all project Play Mode smoke tests.");
         }
     }
 

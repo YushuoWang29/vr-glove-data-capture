@@ -9,7 +9,7 @@
 | 数据流 | 数据源 | 采样/触发方式 | 输出文件 |
 |---|---|---|---|
 | **帧时间基准** | `Stopwatch` 单调时钟 + Unity 帧 | 默认 60 Hz | `streams/frame_timing.csv` |
-| **手部骨骼姿态** | Hi5 解算后的左右手可视骨骼 Transform | 默认 60 Hz | `streams/hand_bones.csv` |
+| **手部骨骼姿态** | Hi5 `HI5_InertiaInstance.HandBones` 源骨骼 Transform | 默认 60 Hz | `streams/hand_bones.csv` |
 | **关节角** | 骨骼相对父骨骼的 local rotation | 默认 60 Hz | `streams/joint_angles.csv` |
 | **物体位姿与速度** | `PickPlaceTaskObject` 或 `CaptureTrackedObject` | 默认 60 Hz | `streams/objects.csv` |
 | **头显/相机位姿** | `Camera.main` | 默认 60 Hz | `streams/devices.csv` |
@@ -26,6 +26,15 @@
 2. 系统不会通过位置差分或旋转差分伪造 `imu_raw.csv`。
 3. 未安装原始数据供应方时，trial 的 `manifest.json` 写入 `rawImuStatus: unavailable_vendor_api`，且不生成容易误用的空 `imu_raw.csv`。
 4. 获得厂商原始数据 API、串口/无线协议或独立采集进程后，只需实现 `IRawImuProvider` 并注册到 `RawImuProviderRegistry`，现有 session、时间戳和导出结构无需改动。
+
+### 与自适应视觉接触的隔离
+
+`HandInteraction/AdaptiveHandContactController` 只修正最终显示用的 `Hi5_Hand_Visible_Hand` 指骨。`Hi5CaptureAdapter` 继续通过反射绑定 `HI5_InertiaInstance.HandBones`，因此：
+
+1. `hand_bones.csv` 和 `joint_angles.csv` **不包含**物体表面约束产生的视觉修正。
+2. 校准、手套融合姿态、抓取状态与现有采集字段不会被视觉接触写回污染。
+3. 数据分析时应把现有两份手部流解释为“手套/运动学目标”，不能解释为精确无穿透的渲染网格姿态。
+4. 若以后需要研究接触后的显示姿态，应新增例如 `visual_hand_bones.csv` 的独立流，并在 manifest 中记录求解器参数；不得覆盖现有源姿态字段。
 
 ## 操作流程
 

@@ -2,9 +2,9 @@
 
 基于 **Unity、HTC VIVE Pro 2、VIVE Tracker 3.0 与 Noitom Hi5 2.0 数据手套** 的手部运动采集和机器人操作示教项目。
 
-项目当前已经跑通从 SteamVR 设备上线、Hi5 手套接入、V-pose 校准、虚拟手驱动到桌面物体交互的完整流程，并在此基础上增加了手指运动学增强、VIVE 前置摄像头透视、VR 第一视角录像、机器人 pick-and-place 任务场景和按 session/trial 管理的结构化同步数据采集。
+项目当前已经跑通从 SteamVR 设备上线、Hi5 手套接入、V-pose 校准、虚拟手驱动到桌面物体交互的完整流程，并在此基础上增加了手指运动学增强、手–物体自适应视觉接触、VIVE 前置摄像头透视、VR 第一视角录像、机器人 pick-and-place 任务场景和按 session/trial 管理的结构化同步数据采集。
 
-> - **当前推荐开发版本**：`codex/unified-data-capture`
+> - **当前推荐开发版本**：`codex/adaptive-hand-contact`
 > - **Unity 固定版本**：`2019.4.18f1`
 > - **主要运行方式**：Windows + SteamVR + Unity Editor Play Mode
 
@@ -16,6 +16,7 @@
 - 使用左右手各一台 **VIVE Tracker 3.0** 提供手部空间定位。
 - 在厂商解算结果上开放手指 **外展/内收（abduction/adduction）**，改善拇指与小指对指能力。
 - 支持可选的 **PIP–DIP 比例耦合**，在传感器数量有限时获得更稳定的指尖姿态。
+- 提供 **手–物体自适应视觉接触**：自由空间保持手套姿态，接触后把将要穿入刚体的可视指骨截停在物体表面；源骨骼、校准、抓取状态和采集数据保持不变。
 - 使用 VIVE Pro 2 前置摄像头实现实验性的 **video see-through** 混合现实透视。
 - 使用 Unity Recorder 在 Editor Play Mode 中录制 **VR 第一视角 MP4**。
 - 提供可在 **Scene View 直接编辑**的机器人操作任务场景，包括球入桶、杯放定位垫、罐入箱和颜色分类。
@@ -54,6 +55,7 @@ flowchart LR
 
     subgraph Project["VRGloveDataCapture 原创扩展"]
         Finger["FingerKinematics<br/>外展/内收 + PIP–DIP 耦合"]
+        Contact["HandInteraction<br/>可视手表面接触约束"]
         MR["MixedReality<br/>VIVE 摄像头透视"]
         Capture["Capture<br/>session/trial + 多流 CSV + MP4"]
         Tasks["RoboticsTasks<br/>YCB 抓取任务 + 统一复位"]
@@ -67,10 +69,12 @@ flowchart LR
     SteamVR --> Interaction
     Interaction --> Scenes
     Scenes --> Finger
+    Finger --> Contact
+    Tasks --> Contact
     SteamVR --> MR
     Scenes --> Capture
     Scenes --> Tasks
-    Finger --> HMD
+    Contact --> HMD
     MR --> HMD
     Capture --> Dataset["Captures/participants/...<br/>CSV + events + manifest + MP4"]
     Tasks --> Capture
@@ -88,6 +92,7 @@ flowchart LR
 5. **资源可追溯**：YCB 子集保留对象 ID、下载归档哈希、文件哈希和 CC BY 4.0 署名信息。
 6. **统一时钟与原子化落盘**：一个采样时刻只读取一次单调时钟，多流共享 `sample_id`/`t_trial_ns`；录制中使用 `.partial`，正常结束后再生成 manifest、校验和与 `COMPLETE`。
 7. **原始值不造假**：解算后的骨骼/关节姿态与九轴原始 IMU 分流记录；缺少厂商原始接口时显式标记不可用。
+8. **视觉接触与测量隔离**：接触求解器只修改 `Hi5_Hand_Visible_Hand` 的最终显示 Transform；统一采集继续读取 `HI5_InertiaInstance.HandBones`，不会把表面贴合伪装成手套测量。
 
 ## 主要功能
 
@@ -95,6 +100,7 @@ flowchart LR
 |---|---|---|---|
 | **Hi5 手指外展/内收解锁** | Play Mode 自动启用 | 关闭厂商 `finger ADB fixed`，保留手指横向自由度 | [FINGER_KINEMATICS.md](docs/FINGER_KINEMATICS.md) |
 | **PIP–DIP 耦合** | 可选，需要在手骨骼根节点配置组件 | 按比例约束 DIP 屈伸，同时保留其他旋转分量 | [FINGER_KINEMATICS.md](docs/FINGER_KINEMATICS.md) |
+| **手–物体自适应视觉接触** | Play Mode 自动安装到左右可视手 | 手套目标将穿入刚体时，逐指骨贴合表面；不改校准、抓取和采集源 | [HAND_OBJECT_CONTACT.md](docs/HAND_OBJECT_CONTACT.md) |
 | **VIVE 视频透视** | Play Mode 按 `P` 开关，默认关闭 | 将 OpenVR Tracked Camera 视频合成到虚拟物体之后 | [MIXED_REALITY.md](docs/MIXED_REALITY.md) |
 | **VR 第一视角录像** | Editor Play Mode 按 `F9` 开始/停止 | `Recordings/vr_view_*.mp4` | [VR_VIEW_RECORDING.md](docs/VR_VIEW_RECORDING.md) |
 | **统一实验数据采集** | `Capture Control` 配置；Play Mode 按 `F12` 启停 trial、`F11` 标记 | `Captures/participants/<ID>/sessions/...` 下的 CSV、事件、manifest、校验和与同步 MP4 | [DATA_CAPTURE.md](docs/DATA_CAPTURE.md) |
@@ -143,7 +149,7 @@ flowchart LR
 ```powershell
 git clone https://github.com/YushuoWang29/vr-glove-data-capture.git
 cd vr-glove-data-capture
-git checkout codex/unified-data-capture
+git checkout codex/adaptive-hand-contact
 ```
 
 默认 `main` 当前仍是初始化基线；在功能分支合并前，应使用上述推荐分支。
@@ -214,6 +220,7 @@ Tools > VR Glove Data Capture > Task Setups > Open Pick Place Task Setup
 进入 Play Mode 后，项目会自动执行以下扩展：
 
 - 启用手指外展/内收模式。
+- 给左右 Hi5 可视手安装手–物体自适应接触求解器；仅显示层生效。
 - 在主相机上安装透视组件。
 - 安装 `F9` VR 录像热键。
 - 安装独立于 Scene 的统一采集管理器；任务物体会自动加入物体轨迹，任务成功和复位会自动加入事件流。
@@ -231,6 +238,7 @@ Tools > VR Glove Data Capture > Task Setups > Open Pick Place Task Setup
 | `F11` | 在活动 trial 中写入人工事件标记 | `events/events.csv` 出现 `manual_marker` |
 | `F8` | 发布全场复位消息 | 新增物体、任务进度和目标颜色恢复 |
 | `F7`（Edit Mode） | 运行 pick-and-place Play Mode 冒烟测试 | Console 出现 `passed=1, failed=0, skipped=0` |
+| `F10`（Edit Mode） | 运行项目全部 3 项 Play Mode 回归测试 | Console 出现 `passed=3, failed=0, skipped=0` |
 | 场景实体复位按钮 | 与 `F8` 相同的统一复位 | 原厂物体和新增任务物体同时恢复 |
 
 ### 8. 采集结构化示教数据
@@ -257,6 +265,7 @@ vr-glove-data-capture/
 ├─ docs/
 │  ├─ SETUP.md                     # 硬件、SDK 和 Unity 配置
 │  ├─ FINGER_KINEMATICS.md         # 手指自由度与 PIP–DIP 耦合
+│  ├─ HAND_OBJECT_CONTACT.md        # 可视手指表面接触与数据隔离
 │  ├─ MIXED_REALITY.md             # VIVE 视频透视
 │  ├─ VR_VIEW_RECORDING.md         # VR 第一视角录像
 │  ├─ DATA_CAPTURE.md               # session/trial、多流数据、时间戳和数据字典
@@ -269,6 +278,7 @@ vr-glove-data-capture/
       │  ├─ VRGloveDataCapture/
       │  │  ├─ Runtime/
       │  │  │  ├─ FingerKinematics/
+      │  │  │  ├─ HandInteraction/
       │  │  │  ├─ MixedReality/
       │  │  │  ├─ Capture/
       │  │  │  └─ RoboticsTasks/
@@ -322,6 +332,14 @@ PickPlaceTaskSceneSmokeTests.EditableTaskSceneBindsFiveTasksAndHi5ResetRestoresT
 5. 任务进度和目标颜色恢复。
 
 当前开发版本已经在 Unity `2019.4.18f1` 下通过资源验证和上述 Play Mode 测试。
+
+手–物体自适应视觉接触测试为：
+
+```text
+AdaptiveHandContactSmokeTests.SolverAutoInstallsOnBothVisibleHandsWithoutWritingSourceBones
+```
+
+该测试会加载真实 Hi5 场景，验证左右手自动安装、源/显示骨骼隔离、刚体接触时源姿态零写入，并构造一个食指–球面探针接触来确认只截停可视指骨。按 **`F10`**（Edit Mode）或执行 `Tools > VR Glove Data Capture > Run All Project Play Mode Tests` 可以一次运行该测试、pick-and-place 复位测试和统一采集测试；当前结果为 `passed=3, failed=0, skipped=0`。
 
 统一采集的端到端测试为：
 
