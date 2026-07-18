@@ -1,15 +1,18 @@
 using UnityEngine;
+using VRGloveDataCapture.Capture;
 
 namespace VRGloveDataCapture.RoboticsTasks
 {
     /// <summary>Detects when the matching task object has entered its placement target.</summary>
     public sealed class PickPlaceTargetZone : MonoBehaviour
     {
-        private string taskId;
-        private PickPlaceTaskSceneController controller;
-        private Renderer indicator;
-        private Color readyColor;
+        [SerializeField] private string taskId;
+        [SerializeField] private PickPlaceTaskSceneController controller;
+        [SerializeField] private Renderer indicator;
+        [SerializeField] private Color readyColor;
         private bool completed;
+
+        public string TaskId { get { return taskId; } }
 
         internal void Configure(
             string targetTaskId,
@@ -21,6 +24,16 @@ namespace VRGloveDataCapture.RoboticsTasks
             controller = taskController;
             indicator = targetIndicator;
             readyColor = targetReadyColor;
+            ApplyColor(readyColor);
+        }
+
+        private void Awake()
+        {
+            if (controller == null)
+            {
+                controller = GetComponentInParent<PickPlaceTaskSceneController>();
+            }
+
             ApplyColor(readyColor);
         }
 
@@ -49,6 +62,11 @@ namespace VRGloveDataCapture.RoboticsTasks
 
             completed = true;
             ApplyColor(new Color(0.2f, 0.9f, 0.32f, 1f));
+            CaptureEventBus.Publish(
+                "object_entered_target",
+                taskId,
+                taskObject.Hi5ObjectName,
+                "target=" + gameObject.name);
             if (controller != null)
             {
                 controller.MarkCompleted(taskId);
@@ -57,9 +75,17 @@ namespace VRGloveDataCapture.RoboticsTasks
 
         private void ApplyColor(Color color)
         {
-            if (indicator != null && indicator.material != null)
+            if (indicator == null)
             {
-                indicator.material.color = color;
+                return;
+            }
+
+            // Runtime targets need independent color state; edit-time scene
+            // generation must not instantiate and leak temporary materials.
+            Material material = Application.isPlaying ? indicator.material : indicator.sharedMaterial;
+            if (material != null)
+            {
+                material.color = color;
             }
         }
     }

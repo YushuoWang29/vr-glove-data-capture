@@ -1,12 +1,51 @@
 # 机器人 Pick-and-Place 任务场景
 
-## 版本目标
+## 当前场景入口
 
-本版本在厂商 `TableScene_Vive` 示例中增加一组可用于手部示教和机器人模仿学习原型采集的桌面操作任务。实现遵循三个约束：
+机器人任务已经从“进入 Play Mode 后临时生成”升级为**可在 Unity Scene View 中直接编辑的持久化场景**：
 
-1. 以低认知负担的 **pick-and-place** 为主，先覆盖球体、带把手物体、圆柱体和规则方块。
-2. 不修改、不复制仓库忽略的 Hi5 专有 Scene；任务台在 Play Mode 中由项目原创代码自动注入。
-3. 复用 Hi5 场景原有的 `messageObjectReset` 消息，使实体复位按钮成为整个场景的统一复位入口。
+```text
+Assets/VRGloveDataCapture/Scenes/TaskSetups/PickPlaceTasks.unity
+```
+
+可以双击该文件、按 `Ctrl+Shift+F6`，或执行以下菜单打开：
+
+```text
+Tools > VR Glove Data Capture > Task Setups > Open Pick Place Task Setup
+```
+
+打开后，编辑器自动形成双场景工作区：
+
+| Scene | 内容 | Git 状态 | 编辑规则 |
+|---|---|---|---|
+| `TableScene_Vive` | 原厂校准流程、虚拟手、状态面板、示例物体、实体复位按钮 | 本地 SDK，Git 忽略 | 保持原厂，不直接修改 |
+| `PickPlaceTasks` | YCB 物体、彩色方块、容器、触发区、任务控制器 | 本仓库跟踪 | 在 Scene View 中直接编辑 |
+
+**`PickPlaceTasks` 必须保持为 Active Scene**。自动加载器会在打开任务场景后设置这一状态，因此新建、复制或拖入的对象默认保存到项目任务场景，而不是写进原厂场景。
+
+## 双场景架构
+
+### 编辑阶段
+
+任务场景根节点 `Task_Setup_Metadata` 带有 `TaskSetupSceneMarker`，其中记录基础场景路径：
+
+```text
+Assets/Hi5_Interaction_SDK/Scenes/Vive/TableScene_Vive.unity
+```
+
+`TaskSetupSceneWorkspace` 监听 Unity 的场景打开事件。只要发现标记，它就以 **Additive** 模式加载上述基础场景，并重新把任务场景设为 Active Scene。这样每一个通过项目菜单建立的任务 setup 都复用原厂校准与状态面板，但不复制、不修改专有 `.unity` 文件。
+
+### 运行阶段
+
+持久化场景只保存项目自有组件，不保存 Hi5 专有组件。进入 Play Mode 后：
+
+1. `PickPlaceTaskSceneController` 等待 Hi5 simple-object manager 就绪。
+2. `PickPlaceTaskObject` 按序列化的对象 ID 和名称动态挂接 Hi5 simple-object 组件。
+3. Hi5 接管可抓物体后，控制器记录新的初始父节点、世界位置、旋转和缩放。
+4. `PickPlaceTargetZone` 监听匹配物体进入目标触发体。
+5. 控制器订阅原厂 `messageObjectReset`，把新增任务接入同一个实体复位按钮。
+
+如果只打开原厂 `TableScene_Vive`，旧的运行时安装器仍会在 Play Mode 中生成兼容布局，作为向后兼容入口；该临时布局不会出现在编辑模式。新任务开发应始终使用项目自有任务场景。
 
 ## 任务清单
 
@@ -18,56 +57,112 @@
 | 4A | 红色方块 | 红色分类箱 | 红块进入红箱 | 颜色条件分类、精确放置 |
 | 4B | 蓝色方块 | 蓝色分类箱 | 蓝块进入蓝箱 | 颜色条件分类、精确放置 |
 
-目标底面在成功时变为绿色。Console 同时记录任务 ID 和累计完成数。当前判据是物体碰撞体进入对应触发体积；它适合验证工作流和采集示教，但尚未加入“释放后静止若干帧”的严格机器人基准判据。
+目标底面成功时变为绿色，Console 同时记录任务 ID 和累计完成数。当前判据是匹配物体进入对应触发体积，尚未增加“释放后保持静止若干帧”的严格机器人基准条件。
 
-## 设计依据与数据来源
+## Scene View 编辑方法
 
-**YCB Object and Model Set** 面向机器人操作基准，包含日常物体的网格、纹理和 RGB-D 数据。本项目只引入三个 **Google 16k textured mesh**，避免把完整数据集或原始扫描数据塞入源码仓库。YCB 数据集页面声明数据采用 **CC BY 4.0**；署名和改动说明见根目录 `THIRD_PARTY_NOTICES.md` 与 `LICENSES/YCB-CC-BY-4.0.txt`。
+### 调整现有任务
 
-任务形式参考了 [ManiSkill 桌面夹爪任务](https://maniskill.readthedocs.io/en/latest/tasks/table_top_gripper/) 中的 `PickCube`、`PickSingleYCB` 和 `PlaceSphere`：先用可解释的单物体放置任务验证抓取、搬运和释放，再逐步增加分类、堆叠、随机化和更严格的成功条件。YCB 的正式项目与引用信息见 [YCB Benchmarks](https://www.ycbbenchmarks.com/) 和 [YCB 数据下载页](https://ycb-benchmarks.s3-website-us-east-1.amazonaws.com/)。
+1. 在 Hierarchy 中只编辑 `PickPlaceTasks` 下的 `VRGlove_PickPlace_Tasks`。
+2. 移动起始物体、蓝色起始垫、目标容器和对应的 `*_Success_Zone`。
+3. 调整目标区时，同时检查其 `BoxCollider` 大小，避免视觉容器与成功体积不一致。
+4. 保存场景；物体当前世界位姿会在下一次进入 Play Mode 时成为复位位姿。
+5. 不要把 Hi5 专有 simple-object 组件手工保存到任务场景，它们由运行时桥接器统一添加。
 
-## 自动安装机制
+### 增加一个可抓物体
 
-运行时安装器位于：
+可抓物体至少需要以下配置：
+
+| 配置 | 要求 | 作用 |
+|---|---|---|
+| Layer | `Hi5ObjectGrasp`，索引 11 | 进入 Hi5 抓取碰撞链路 |
+| Collider | 非 Trigger，形状贴近操作物体 | 指尖碰撞与目标区检测 |
+| Rigidbody | 初始 `isKinematic = true` | 由 Hi5 交互状态切换运动学状态 |
+| `PickPlaceTaskObject` | 填写唯一 `Task Id`、`Hi5 Object Id`、`Hi5 Object Name` | 运行时注册、目标匹配和复位 |
+
+项目当前占用 Hi5 对象 ID `-1001` 至 `-1005`。新增对象应使用不重复的负数 ID，并为其设置与目标区完全一致的 `Task Id`。
+
+### 增加一个目标区
+
+1. 在目标视觉对象下新建 GameObject。
+2. 设置 Layer 为 `Hi5ObjectTrigger`，索引 13。
+3. 添加 `BoxCollider` 并勾选 `Is Trigger`。
+4. 添加 `PickPlaceTargetZone`。
+5. 将 `Task Id` 设置为对应可抓物体的同名 ID。
+6. 把根节点的 `PickPlaceTaskSceneController` 拖入 `Controller`。
+7. 把需要变色的容器底面 Renderer 拖入 `Indicator`，并设置待完成颜色。
+
+## 新建后续任务 setup
+
+执行：
 
 ```text
-Assets/VRGloveDataCapture/Runtime/RoboticsTasks/
+Tools > VR Glove Data Capture > Task Setups > Create Empty Task Setup Scene
 ```
 
-`PickPlaceTaskSceneInstaller` 只在加载名为 `TableScene_Vive` 的 Scene 且 Hi5 simple-object manager 就绪后工作。它以原有 `Interaction_Simple_Object_3` 的底面作为桌面高度基准，在其后方生成任务布局。新增可抓物体通过运行时反射获得与厂商简单物体相同的四类 Hi5 组件，ID 使用 `-1001` 到 `-1005`，避免与示例物体的低位负数 ID 冲突。
+编辑器会建立带 `TaskSetupSceneMarker` 的空任务场景和 `Task_Setup_Content` 根节点，然后自动叠加加载原厂基础场景。后续任务集合应分别保存为独立 `.unity` 文件，例如：
 
-YCB 模型以实际网格包络自动归一化到约 `74 mm`、`117 mm` 和 `102 mm` 的最大尺寸。交互碰撞采用简化球体或包围盒，以提高 Hi5 指尖碰撞的稳定性；渲染仍使用 YCB 纹理网格。
+```text
+Scenes/TaskSetups/StackingTasks.unity
+Scenes/TaskSetups/InsertionTasks.unity
+Scenes/TaskSetups/BimanualTasks.unity
+```
+
+这种组织方式让不同实验任务彼此隔离，同时确保每个 setup 都保留同一套原厂校准、状态面板和复位入口。
+
+`Rebuild Pick Place Task Setup` 菜单会**覆盖** `PickPlaceTasks.unity`，只应用于明确需要恢复项目默认布局的情况；日常 Scene View 调整后不要执行该命令。
 
 ## 统一复位行为
 
-场景原有实体按钮会发布 Hi5 `messageObjectReset`。新增 `PickPlaceTaskSceneController` 订阅同一消息，并在收到消息时执行：
+原厂实体按钮发布 Hi5 `messageObjectReset`。`PickPlaceTaskSceneController` 收到消息后执行：
 
-1. 将五个任务物体恢复到各自初始父节点、世界位置、旋转和缩放。
-2. 将刚体线速度、角速度清零，恢复为 Hi5 simple-object 的初始 kinematic 状态并休眠。
+1. 将五个任务物体恢复到进入 Play Mode 后记录的初始父节点、世界位置、旋转和缩放。
+2. 将刚体线速度、角速度清零，恢复 kinematic 状态并休眠。
 3. 清空累计完成集合，将所有目标底面恢复为待完成颜色。
-4. 让厂商示例物体继续执行其原有复位逻辑。
+4. 保留原厂示例物体自身的复位行为。
 
-Game View 聚焦时按 `F8` 会主动发布同一个 Hi5 复位消息，因此它是实体按钮的键盘等效入口，不是另一套局部复位。
+Game View 聚焦时按 `F8` 会发布同一个 Hi5 复位消息，因此它是实体按钮的键盘等效入口。
 
-## 测试步骤
+## 设计依据与数据来源
 
-1. 使用 Unity `2019.4.18f1` 打开 `Unity Project/vr-glove-data-capture`，等待无编译错误。
-2. 确认本地已按既有流程导入 Foundation SDK 和 Interaction SDK。
-3. 打开 `Assets/Hi5_Interaction_SDK/Scenes/Vive/TableScene_Vive.unity`。
-4. 启动 SteamVR 与 Hi5 运行时，完成校准后进入 Play Mode。
-5. 在原有简单球体后方确认出现标题 `ROBOT PICK & PLACE BENCHMARKS`、三个 YCB 物体、两个彩色方块和对应容器。
-6. 逐项抓取并放入目标；确认对应目标底面变绿，Console 最终出现 `All pick-and-place tasks completed`。
-7. 将部分物体随意移动或放入错误容器，拍下原场景实体复位按钮；确认全部新增物体回到蓝色起始垫、速度归零、目标颜色恢复。
-8. 再次移动物体，聚焦 Game View 后按 `F8`，确认产生相同的整场复位结果。
+**YCB Object and Model Set** 面向机器人操作基准，包含日常物体的网格、纹理和 RGB-D 数据。本项目只引入三个 Google 16k textured mesh，并将其归一化到约 `74 mm`、`117 mm` 和 `102 mm` 的最大尺寸。交互碰撞采用简化球体或包围盒，渲染仍使用 YCB 纹理网格。
 
-如果标题和任务台没有生成，优先检查 Scene 名称、Console 是否出现 `Hi5 simple-object manager did not become ready`，以及本地厂商 SDK 是否完整导入。
+YCB 数据集页面声明数据采用 **CC BY 4.0**；署名和改动说明见根目录 `THIRD_PARTY_NOTICES.md` 与 `LICENSES/YCB-CC-BY-4.0.txt`。任务形式参考 [ManiSkill 桌面夹爪任务](https://maniskill.readthedocs.io/en/latest/tasks/table_top_gripper/) 中的 `PickCube`、`PickSingleYCB` 和 `PlaceSphere`。YCB 的正式项目与引用信息见 [YCB Benchmarks](https://www.ycbbenchmarks.com/) 和 [YCB 数据下载页](https://ycb-benchmarks.s3-website-us-east-1.amazonaws.com/)。
 
-## 自动验证
+## 验证流程
 
-- Unity 菜单 `Tools > VR Glove Data Capture > Validate Pick Place Task Assets` 检查三个 YCB 模型及纹理、三个 Hi5 物理层和本地 `TableScene_Vive` 是否齐全。
-- Play Mode 测试 `PickPlaceTaskSceneSmokeTests.TableSceneBuildsFiveTasksAndHi5ResetRestoresTheirPoses` 会加载真实厂商场景，验证 5 个任务对象与 5 个目标区生成、全部成功判据触发，以及 Hi5 复位消息恢复位置、刚体状态、速度和目标颜色。
-- 未安装本地 Hi5 Interaction SDK 时，Play Mode 测试会标记为忽略；资源静态验证会明确报出缺失场景。
+### 静态资源验证
+
+执行：
+
+```text
+Tools > VR Glove Data Capture > Validate Pick Place Task Assets
+```
+
+验证器检查项目自有任务场景、三个 YCB 模型及纹理、三个 Hi5 物理层和本地 `TableScene_Vive`。
+
+### Play Mode 自动测试
+
+测试名称：
+
+```text
+PickPlaceTaskSceneSmokeTests.EditableTaskSceneBindsFiveTasksAndHi5ResetRestoresTheirPoses
+```
+
+在 Edit Mode 下按 `Ctrl+Shift+F7`，或执行 `Tools > VR Glove Data Capture > Task Setups > Run Pick Place Play Mode Test`，即可单独运行该回归测试。Console 汇总 `passed=1, failed=0, skipped=0` 表示通过。
+
+测试先加载持久化任务场景，再以 Additive 模式加载原厂场景，并验证 5 个任务对象完成 Hi5 绑定、5 个目标判据全部触发，以及 `messageObjectReset` 恢复位置、刚体状态、速度、任务进度和目标颜色。未安装本地 Hi5 Interaction SDK 时测试标记为忽略。
+
+### 实机检查
+
+1. 打开 `PickPlaceTasks.unity`，确认 Hierarchy 同时显示 `TableScene_Vive` 和 `PickPlaceTasks`。
+2. 确认 Scene View 在 Play Mode 前已经能看到完整任务区。
+3. 启动 SteamVR 与 Hi5 运行时，完成校准后进入 Play Mode。
+4. 确认原厂校准/状态面板仍在，虚拟手能抓取五个任务物体。
+5. 逐项放置，确认目标底面变绿并出现全部完成日志。
+6. 移动物体后拍下原厂实体复位按钮，确认原厂物体和项目任务物体同时复位。
+7. 再用 `F8` 验证相同的全场复位结果。
 
 ## 数据资产清单
 
-下载归档与仓库内文件的来源、哈希和裁剪范围记录在 [YCB_ASSET_MANIFEST.md](YCB_ASSET_MANIFEST.md)。仓库没有包含 `.tgz`、RGB/RGB-D 原始扫描、点云或高面数版本。
+下载归档、仓库内文件来源、哈希和裁剪范围记录在 [YCB_ASSET_MANIFEST.md](YCB_ASSET_MANIFEST.md)。仓库没有包含 `.tgz`、RGB/RGB-D 原始扫描、点云或高面数版本。

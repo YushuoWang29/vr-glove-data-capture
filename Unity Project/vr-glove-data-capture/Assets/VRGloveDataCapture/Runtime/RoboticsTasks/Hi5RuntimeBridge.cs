@@ -77,20 +77,20 @@ namespace VRGloveDataCapture.RoboticsTasks
 
             try
             {
-                target.AddComponent(colliderType);
+                GetOrAddComponent(target, colliderType);
 
-                Component property = target.AddComponent(propertyType);
+                Component property = GetOrAddComponent(target, propertyType);
                 SetPublicField(property, "IsPinch", true);
                 SetPublicField(property, "IsPinchInHand", true);
                 SetPublicField(property, "IsClap", true);
                 SetPublicField(property, "IsLift", true);
 
-                Component item = target.AddComponent(itemType);
+                Component item = GetOrAddComponent(target, itemType);
                 SetPublicField(item, "nameObject", objectName);
                 SetPublicField(item, "idObject", objectId);
                 SetPublicField(item, "IsChangeColor", false);
 
-                target.AddComponent(interfaceType);
+                GetOrAddComponent(target, interfaceType);
                 return true;
             }
             catch (Exception exception)
@@ -98,6 +98,17 @@ namespace VRGloveDataCapture.RoboticsTasks
                 Debug.LogError("[PickPlaceTasks] Failed to configure '" + objectName + "' for Hi5 interaction: " + exception);
                 return false;
             }
+        }
+
+        internal static bool HasSimpleObjectComponents(GameObject target)
+        {
+            if (target == null)
+            {
+                return false;
+            }
+
+            Type interfaceType = FindType("Hi5_Interaction_Interface.Hi5_Interface_Simple_Object");
+            return interfaceType != null && target.GetComponent(interfaceType) != null;
         }
 
         internal static ResetSubscription RegisterResetCallback(object target, string methodName)
@@ -168,6 +179,12 @@ namespace VRGloveDataCapture.RoboticsTasks
             {
                 field.SetValue(component, value);
             }
+        }
+
+        private static Component GetOrAddComponent(GameObject target, Type componentType)
+        {
+            Component component = target.GetComponent(componentType);
+            return component != null ? component : target.AddComponent(componentType);
         }
 
         private static Type FindType(string fullName)

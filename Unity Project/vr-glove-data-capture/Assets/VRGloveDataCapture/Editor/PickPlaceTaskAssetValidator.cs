@@ -8,6 +8,7 @@ namespace VRGloveDataCapture.Editor
     public static class PickPlaceTaskAssetValidator
     {
         private const string VendorScenePath = "Assets/Hi5_Interaction_SDK/Scenes/Vive/TableScene_Vive.unity";
+        private const string TaskScenePath = "Assets/VRGloveDataCapture/Scenes/TaskSetups/PickPlaceTasks.unity";
 
         private static readonly string[] RequiredResources =
         {
@@ -24,7 +25,7 @@ namespace VRGloveDataCapture.Editor
             {
                 EditorUtility.DisplayDialog(
                     "Pick Place Task Validation",
-                    "All required YCB resources, Hi5 layers, and the local TableScene_Vive asset are available.",
+                    "The editable task scene, required YCB resources, Hi5 layers, and local TableScene_Vive asset are available.",
                     "OK");
             }
             else
@@ -100,9 +101,18 @@ namespace VRGloveDataCapture.Editor
                 errors++;
             }
 
+            SceneAsset taskScene = AssetDatabase.LoadAssetAtPath<SceneAsset>(TaskScenePath);
+            if (taskScene == null)
+            {
+                Debug.LogError("[PickPlaceTasks] Editable task setup scene is missing: " + TaskScenePath);
+                errors++;
+            }
+
             if (errors == 0)
             {
-                Debug.Log("[PickPlaceTasks] Asset validation passed: 3 YCB resources, 3 Hi5 layers, and TableScene_Vive.");
+                Debug.Log(
+                    "[PickPlaceTasks] Asset validation passed: editable task scene, 3 YCB resources, " +
+                    "3 Hi5 layers, and TableScene_Vive.");
             }
 
             return errors;

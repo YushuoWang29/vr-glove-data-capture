@@ -23,6 +23,7 @@ namespace VRGloveDataCapture.Editor
         private static RecorderControllerSettings controllerSettings;
         private static MovieRecorderSettings movieSettings;
         private static string currentOutputPath;
+        private static bool managedByCaptureTrial;
 
         static VrViewRecorderEditorBridge()
         {
@@ -32,6 +33,10 @@ namespace VRGloveDataCapture.Editor
             EditorApplication.playModeStateChanged += OnPlayModeStateChanged;
             AssemblyReloadEvents.beforeAssemblyReload -= StopAndRelease;
             AssemblyReloadEvents.beforeAssemblyReload += StopAndRelease;
+            CaptureLifecycle.TrialStarted -= OnCaptureTrialStarted;
+            CaptureLifecycle.TrialStarted += OnCaptureTrialStarted;
+            CaptureLifecycle.TrialStopping -= OnCaptureTrialStopping;
+            CaptureLifecycle.TrialStopping += OnCaptureTrialStopping;
         }
 
         [MenuItem("Tools/VR Glove Data Capture/Toggle VR View Recording")]
@@ -44,13 +49,23 @@ namespace VRGloveDataCapture.Editor
                 return;
             }
 
+            if (CaptureSessionManager.Instance != null &&
+                CaptureSessionManager.Instance.IsRecording &&
+                CaptureSessionManager.Instance.CurrentTrial != null &&
+                CaptureSessionManager.Instance.CurrentTrial.Profile.recordVideo)
+            {
+                Debug.LogWarning(
+                    "[VRGloveDataCapture] F9 is locked while F12 unified capture controls synchronized video.");
+                return;
+            }
+
             if (recorderController != null && recorderController.IsRecording())
             {
                 StopAndRelease();
             }
             else
             {
-                StartRecording();
+                StartRecording(null, false);
             }
         }
 
@@ -60,15 +75,24 @@ namespace VRGloveDataCapture.Editor
             return !EditorApplication.isCompiling;
         }
 
-        private static void StartRecording()
+        private static void StartRecording(string requestedOutputPath, bool isManagedTrial)
         {
-            string projectRoot = Path.GetFullPath(Path.Combine(Application.dataPath, ".."));
-            string outputDirectory = Path.Combine(projectRoot, "Recordings");
+            string outputDirectory;
+            if (string.IsNullOrEmpty(requestedOutputPath))
+            {
+                string projectRoot = Path.GetFullPath(Path.Combine(Application.dataPath, ".."));
+                outputDirectory = Path.Combine(projectRoot, "Recordings");
+                currentOutputPath = Path.Combine(
+                    outputDirectory,
+                    "vr_view_" + DateTime.Now.ToString("yyyyMMdd_HHmmss") + ".mp4");
+            }
+            else
+            {
+                currentOutputPath = Path.ChangeExtension(requestedOutputPath, ".mp4");
+                outputDirectory = Path.GetDirectoryName(currentOutputPath);
+            }
             Directory.CreateDirectory(outputDirectory);
-
-            currentOutputPath = Path.Combine(
-                outputDirectory,
-                "vr_view_" + DateTime.Now.ToString("yyyyMMdd_HHmmss") + ".mp4");
+            managedByCaptureTrial = isManagedTrial;
 
             controllerSettings = ScriptableObject.CreateInstance<RecorderControllerSettings>();
             controllerSettings.name = "VR Glove VR View Recorder";
@@ -108,6 +132,14 @@ namespace VRGloveDataCapture.Editor
                 Debug.Log(
                     "[VRGloveDataCapture] VR VIEW RECORDING STARTED (F9 to stop): " +
                     currentOutputPath);
+                if (managedByCaptureTrial)
+                {
+                    CaptureEventBus.Publish(
+                        "video_recording_started",
+                        string.Empty,
+                        "hmd_camera",
+                        currentOutputPath);
+                }
             }
             catch (Exception exception)
             {
@@ -147,6 +179,38 @@ namespace VRGloveDataCapture.Editor
             }
 
             currentOutputPath = null;
+            managedByCaptureTrial = false;
+        }
+
+        private static void OnCaptureTrialStarted(CaptureTrialContext context)
+        {
+            if (context == null || !context.Profile.recordVideo)
+            {
+                return;
+            }
+
+            if (recorderController != null && recorderController.IsRecording())
+            {
+                StopAndRelease();
+            }
+
+            StartRecording(context.VideoOutputPath, true);
+        }
+
+        private static void OnCaptureTrialStopping(CaptureTrialContext context)
+        {
+            if (!managedByCaptureTrial)
+            {
+                return;
+            }
+
+            string savedPath = currentOutputPath;
+            StopAndRelease();
+            CaptureEventBus.Publish(
+                "video_recording_stopped",
+                string.Empty,
+                "hmd_camera",
+                savedPath ?? string.Empty);
         }
 
         private static void OnPlayModeStateChanged(PlayModeStateChange state)

@@ -15,9 +15,10 @@ namespace VRGloveDataCapture.Tests
     public sealed class PickPlaceTaskSceneSmokeTests
     {
         private const string VendorScenePath = "Assets/Hi5_Interaction_SDK/Scenes/Vive/TableScene_Vive.unity";
+        private const string TaskScenePath = "Assets/VRGloveDataCapture/Scenes/TaskSetups/PickPlaceTasks.unity";
 
         [UnityTest]
-        public IEnumerator TableSceneBuildsFiveTasksAndHi5ResetRestoresTheirPoses()
+        public IEnumerator EditableTaskSceneBindsFiveTasksAndHi5ResetRestoresTheirPoses()
         {
             string absoluteScenePath = Path.GetFullPath(Path.Combine(Application.dataPath, "..", VendorScenePath));
             if (!File.Exists(absoluteScenePath))
@@ -25,22 +26,42 @@ namespace VRGloveDataCapture.Tests
                 Assert.Ignore("Local Hi5 Interaction SDK scene is not installed.");
             }
 
-            AsyncOperation loadOperation = EditorSceneManager.LoadSceneAsyncInPlayMode(
-                VendorScenePath,
+            AsyncOperation taskLoadOperation = EditorSceneManager.LoadSceneAsyncInPlayMode(
+                TaskScenePath,
                 new LoadSceneParameters(LoadSceneMode.Single));
-            while (!loadOperation.isDone)
+            while (!taskLoadOperation.isDone)
+            {
+                yield return null;
+            }
+
+            AsyncOperation baseLoadOperation = EditorSceneManager.LoadSceneAsyncInPlayMode(
+                VendorScenePath,
+                new LoadSceneParameters(LoadSceneMode.Additive));
+            while (!baseLoadOperation.isDone)
             {
                 yield return null;
             }
 
             GameObject layoutRoot = null;
-            for (int frame = 0; frame < 600 && layoutRoot == null; frame++)
+            PickPlaceTaskSceneController controller = null;
+            FieldInfo initializedField = typeof(PickPlaceTaskSceneController).GetField(
+                "initialized",
+                BindingFlags.NonPublic | BindingFlags.Instance);
+            for (int frame = 0; frame < 600; frame++)
             {
                 layoutRoot = GameObject.Find("VRGlove_PickPlace_Tasks");
+                controller = UnityEngine.Object.FindObjectOfType<PickPlaceTaskSceneController>();
+                if (layoutRoot != null && controller != null && (bool)initializedField.GetValue(controller))
+                {
+                    break;
+                }
+
                 yield return null;
             }
 
-            Assert.IsNotNull(layoutRoot, "Runtime installer did not create the task layout.");
+            Assert.IsNotNull(layoutRoot, "The persistent task scene did not contain its editable layout.");
+            Assert.IsNotNull(controller, "The persistent task controller did not load.");
+            Assert.IsTrue((bool)initializedField.GetValue(controller), "The persistent task scene did not bind to Hi5.");
 
             PickPlaceTaskObject[] taskObjects = UnityEngine.Object.FindObjectsOfType<PickPlaceTaskObject>();
             PickPlaceTargetZone[] targetZones = UnityEngine.Object.FindObjectsOfType<PickPlaceTargetZone>();
@@ -85,8 +106,6 @@ namespace VRGloveDataCapture.Tests
 
             yield return new WaitForFixedUpdate();
 
-            PickPlaceTaskSceneController controller =
-                UnityEngine.Object.FindObjectOfType<PickPlaceTaskSceneController>();
             FieldInfo completedTasksField = typeof(PickPlaceTaskSceneController).GetField(
                 "completedTasks",
                 BindingFlags.NonPublic | BindingFlags.Instance);

@@ -5,7 +5,13 @@ namespace VRGloveDataCapture.RoboticsTasks
     /// <summary>Stores the deterministic reset pose and task identity of a graspable object.</summary>
     public sealed class PickPlaceTaskObject : MonoBehaviour
     {
-        public string TaskId { get; private set; }
+        [SerializeField] private string taskId;
+        [SerializeField] private int hi5ObjectId;
+        [SerializeField] private string hi5ObjectName;
+
+        public string TaskId { get { return taskId; } }
+        public int Hi5ObjectId { get { return hi5ObjectId; } }
+        public string Hi5ObjectName { get { return hi5ObjectName; } }
 
         private Transform startParent;
         private Vector3 startPosition;
@@ -14,10 +20,32 @@ namespace VRGloveDataCapture.RoboticsTasks
         private Rigidbody body;
         private bool hasStartPose;
 
-        internal void Configure(string taskId)
+        internal void Configure(string configuredTaskId, int objectId, string objectName)
         {
-            TaskId = taskId;
+            taskId = configuredTaskId;
+            hi5ObjectId = objectId;
+            hi5ObjectName = objectName;
             body = GetComponent<Rigidbody>();
+        }
+
+        internal bool BindToHi5()
+        {
+            if (string.IsNullOrEmpty(taskId) || string.IsNullOrEmpty(hi5ObjectName))
+            {
+                Debug.LogError("[PickPlaceTasks] " + name + " has incomplete serialized task metadata.", this);
+                return false;
+            }
+
+            if (Hi5RuntimeBridge.HasSimpleObjectComponents(gameObject))
+            {
+                return true;
+            }
+
+            bool wasActive = gameObject.activeSelf;
+            gameObject.SetActive(false);
+            bool configured = Hi5RuntimeBridge.AddSimpleObjectComponents(gameObject, hi5ObjectId, hi5ObjectName);
+            gameObject.SetActive(wasActive);
+            return configured;
         }
 
         internal void CaptureStartPose()

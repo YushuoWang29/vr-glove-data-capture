@@ -3,7 +3,8 @@
   "rootNamespace": "VRGloveDataCapture",
   "references": [
     "VRGloveDataCapture.Runtime",
-    "Unity.Recorder.Editor"
+    "Unity.Recorder.Editor",
+    "UnityEditor.TestRunner"
   ],
   "includePlatforms": [
     "Editor"
