@@ -18,7 +18,8 @@ namespace VRGloveDataCapture.UserInterface
         private sealed class ButtonView
         {
             public string Id;
-            public TextMesh Label;
+            public TextMesh Title;
+            public TextMesh Status;
             public MeshRenderer Surface;
             public Material Material;
         }
@@ -26,16 +27,20 @@ namespace VRGloveDataCapture.UserInterface
         private const string InstallerName = "[VR Glove Gaze Control Panel]";
         private const string PanelName = "VRGlove_FunctionControlPanel";
         private static GazeFunctionPanelController instance;
-        private static readonly Color PanelColor = new Color(0.025f, 0.055f, 0.085f, 0.97f);
-        private static readonly Color ReadyColor = new Color(0.055f, 0.20f, 0.29f, 1.0f);
-        private static readonly Color ActiveColor = new Color(0.02f, 0.48f, 0.43f, 1.0f);
-        private static readonly Color RecordingColor = new Color(0.66f, 0.08f, 0.10f, 1.0f);
-        private static readonly Color WarningColor = new Color(0.62f, 0.35f, 0.04f, 1.0f);
-        private static readonly Color UnavailableColor = new Color(0.16f, 0.18f, 0.20f, 1.0f);
+        private static readonly Color PanelColor = new Color(0.945f, 0.952f, 0.955f, 0.985f);
+        private static readonly Color BorderColor = new Color(0.72f, 0.75f, 0.77f, 1.0f);
+        private static readonly Color TextColor = new Color(0.17f, 0.18f, 0.19f, 1.0f);
+        private static readonly Color SecondaryTextColor = new Color(0.34f, 0.36f, 0.38f, 1.0f);
+        private static readonly Color ReadyColor = new Color(0.985f, 0.988f, 0.99f, 1.0f);
+        private static readonly Color ActiveColor = new Color(0.82f, 0.94f, 0.90f, 1.0f);
+        private static readonly Color RecordingColor = new Color(0.98f, 0.84f, 0.84f, 1.0f);
+        private static readonly Color WarningColor = new Color(0.99f, 0.92f, 0.76f, 1.0f);
+        private static readonly Color UnavailableColor = new Color(0.88f, 0.89f, 0.90f, 1.0f);
 
         private readonly List<GameObject> originalMainChildren = new List<GameObject>();
         private readonly List<ButtonView> buttons = new List<ButtonView>();
         private readonly List<Material> ownedMaterials = new List<Material>();
+        private readonly List<Mesh> ownedMeshes = new List<Mesh>();
 
         private Component menuStateMachine;
         private Component calibrationStateMachine;
@@ -202,23 +207,38 @@ namespace VRGloveDataCapture.UserInterface
             panelRoot.transform.SetParent(mainStateRoot, false);
             panelRoot.transform.localPosition = new Vector3(0.0f, 0.0f, -0.08f);
 
-            CreateSurface("Background", panelRoot.transform, Vector3.zero, new Vector2(9.2f, 5.9f), PanelColor, -0.01f);
+            CreateRoundedSurface(
+                "BackgroundBorder",
+                panelRoot.transform,
+                Vector3.zero,
+                new Vector2(9.5f, 5.85f),
+                0.24f,
+                BorderColor,
+                -0.004f);
+            CreateRoundedSurface(
+                "Background",
+                panelRoot.transform,
+                Vector3.zero,
+                new Vector2(9.42f, 5.77f),
+                0.21f,
+                PanelColor,
+                -0.012f);
             CreateText(
                 "Title",
                 panelRoot.transform,
-                new Vector3(0.0f, 2.35f, -0.06f),
+                new Vector3(0.0f, 2.30f, -0.06f),
                 "VR GLOVE CONTROL CENTER",
-                66,
-                0.085f,
-                Color.white);
+                54,
+                0.052f,
+                TextColor);
             CreateText(
                 "Instruction",
                 panelRoot.transform,
-                new Vector3(0.0f, 1.88f, -0.06f),
-                "Hold gaze until the original radial completes. Keyboard shortcuts remain available.",
-                42,
-                0.052f,
-                new Color(0.70f, 0.84f, 0.91f, 1.0f));
+                new Vector3(0.0f, 1.87f, -0.06f),
+                "GAZE UNTIL THE RADIAL COMPLETES",
+                38,
+                0.036f,
+                SecondaryTextColor);
 
             CreateButton("passthrough", new Vector3(-2.15f, 1.08f, -0.04f), TogglePassthrough);
             CreateButton("video", new Vector3(2.15f, 1.08f, -0.04f), ToggleVideoRecording);
@@ -230,11 +250,11 @@ namespace VRGloveDataCapture.UserInterface
             noticeText = CreateText(
                 "Notice",
                 panelRoot.transform,
-                new Vector3(0.0f, -2.27f, -0.06f),
+                new Vector3(0.0f, -2.34f, -0.06f),
                 notice,
-                42,
-                0.055f,
-                new Color(0.94f, 0.78f, 0.33f, 1.0f));
+                36,
+                0.032f,
+                SecondaryTextColor);
         }
 
         private void CreateButton(string id, Vector3 localPosition, Action action)
@@ -244,23 +264,41 @@ namespace VRGloveDataCapture.UserInterface
             buttonObject.transform.localPosition = localPosition;
 
             BoxCollider collider = buttonObject.AddComponent<BoxCollider>();
-            collider.size = new Vector3(4.0f, 0.88f, 0.08f);
+            collider.size = new Vector3(4.0f, 0.84f, 0.08f);
 
-            MeshRenderer surface = CreateSurface(
+            CreateRoundedSurface(
+                "Border",
+                buttonObject.transform,
+                Vector3.zero,
+                new Vector2(4.08f, 0.92f),
+                0.18f,
+                BorderColor,
+                0.008f);
+
+            MeshRenderer surface = CreateRoundedSurface(
                 "Surface",
                 buttonObject.transform,
                 Vector3.zero,
-                new Vector2(4.0f, 0.88f),
+                new Vector2(4.0f, 0.84f),
+                0.15f,
                 ReadyColor,
                 0.0f);
-            TextMesh label = CreateText(
-                "Label",
+            TextMesh title = CreateText(
+                "Title",
                 buttonObject.transform,
-                new Vector3(0.0f, 0.0f, -0.055f),
+                new Vector3(0.0f, 0.13f, -0.055f),
                 id.ToUpperInvariant(),
-                52,
-                0.070f,
-                Color.white);
+                44,
+                0.046f,
+                TextColor);
+            TextMesh status = CreateText(
+                "Status",
+                buttonObject.transform,
+                new Vector3(0.0f, -0.17f, -0.055f),
+                "READY",
+                34,
+                0.035f,
+                SecondaryTextColor);
 
             Component interactiveItem = buttonObject.AddComponent(interactiveItemType) as Component;
             GazeDwellButton dwell = buttonObject.AddComponent<GazeDwellButton>();
@@ -269,31 +307,31 @@ namespace VRGloveDataCapture.UserInterface
             ButtonView view = new ButtonView
             {
                 Id = id,
-                Label = label,
+                Title = title,
+                Status = status,
                 Surface = surface,
                 Material = surface.sharedMaterial
             };
             buttons.Add(view);
+            FitButtonText(view);
         }
 
-        private MeshRenderer CreateSurface(
+        private MeshRenderer CreateRoundedSurface(
             string objectName,
             Transform parent,
             Vector3 localPosition,
             Vector2 size,
+            float cornerRadius,
             Color color,
             float zOffset)
         {
-            GameObject surfaceObject = GameObject.CreatePrimitive(PrimitiveType.Quad);
-            surfaceObject.name = objectName;
+            GameObject surfaceObject = new GameObject(objectName);
             surfaceObject.transform.SetParent(parent, false);
             surfaceObject.transform.localPosition = localPosition + new Vector3(0.0f, 0.0f, zOffset);
-            surfaceObject.transform.localScale = new Vector3(size.x, size.y, 1.0f);
-            Collider generatedCollider = surfaceObject.GetComponent<Collider>();
-            if (generatedCollider != null)
-            {
-                Destroy(generatedCollider);
-            }
+            Mesh mesh = BuildRoundedRectangleMesh(size, cornerRadius, 6);
+            ownedMeshes.Add(mesh);
+            MeshFilter filter = surfaceObject.AddComponent<MeshFilter>();
+            filter.sharedMesh = mesh;
 
             Shader shader = Shader.Find("Unlit/Color");
             if (shader == null)
@@ -306,10 +344,59 @@ namespace VRGloveDataCapture.UserInterface
                 hideFlags = HideFlags.DontSave
             };
             ownedMaterials.Add(material);
-            MeshRenderer renderer = surfaceObject.GetComponent<MeshRenderer>();
+            MeshRenderer renderer = surfaceObject.AddComponent<MeshRenderer>();
             renderer.sharedMaterial = material;
             renderer.sortingOrder = 30;
             return renderer;
+        }
+
+        private static Mesh BuildRoundedRectangleMesh(Vector2 size, float radius, int cornerSegments)
+        {
+            float halfWidth = size.x * 0.5f;
+            float halfHeight = size.y * 0.5f;
+            float safeRadius = Mathf.Clamp(radius, 0.0f, Mathf.Min(halfWidth, halfHeight));
+            int perimeterCount = cornerSegments * 4 + 4;
+            Vector3[] vertices = new Vector3[perimeterCount + 1];
+            int[] triangles = new int[perimeterCount * 3];
+            vertices[0] = Vector3.zero;
+
+            int vertexIndex = 1;
+            for (int corner = 0; corner < 4; corner++)
+            {
+                float centerX = corner == 0 || corner == 3
+                    ? halfWidth - safeRadius
+                    : -halfWidth + safeRadius;
+                float centerY = corner < 2
+                    ? halfHeight - safeRadius
+                    : -halfHeight + safeRadius;
+                float startDegrees = corner * 90.0f;
+                for (int segment = 0; segment <= cornerSegments; segment++)
+                {
+                    float angle = (startDegrees + segment * 90.0f / cornerSegments) * Mathf.Deg2Rad;
+                    vertices[vertexIndex++] = new Vector3(
+                        centerX + Mathf.Cos(angle) * safeRadius,
+                        centerY + Mathf.Sin(angle) * safeRadius,
+                        0.0f);
+                }
+            }
+
+            for (int index = 0; index < perimeterCount; index++)
+            {
+                int triangle = index * 3;
+                triangles[triangle] = 0;
+                triangles[triangle + 1] = index + 1 == perimeterCount ? 1 : index + 2;
+                triangles[triangle + 2] = index + 1;
+            }
+
+            Mesh mesh = new Mesh
+            {
+                name = "VRGloveRoundedRectangle",
+                hideFlags = HideFlags.DontSave,
+                vertices = vertices,
+                triangles = triangles
+            };
+            mesh.RecalculateBounds();
+            return mesh;
         }
 
         private static TextMesh CreateText(
@@ -360,57 +447,61 @@ namespace VRGloveDataCapture.UserInterface
             Color passthroughColor;
             if (passthrough == null)
             {
-                passthroughText = "PASSTHROUGH\nWAITING FOR VR CAMERA";
+                passthroughText = "WAITING FOR VR CAMERA";
                 passthroughColor = UnavailableColor;
             }
             else if (!passthrough.IsPassthroughRequested)
             {
-                passthroughText = "PASSTHROUGH\nOFF - GAZE TO ENABLE";
+                passthroughText = "OFF  ·  GAZE TO ENABLE";
                 passthroughColor = ReadyColor;
             }
             else if (passthrough.HasLiveFrames)
             {
-                passthroughText = "PASSTHROUGH\nLIVE - GAZE TO DISABLE";
+                passthroughText = "LIVE  ·  GAZE TO DISABLE";
                 passthroughColor = ActiveColor;
             }
             else
             {
-                passthroughText = "PASSTHROUGH\n" + passthrough.State.ToString().ToUpperInvariant();
+                passthroughText = passthrough.State.ToString().ToUpperInvariant();
                 passthroughColor = WarningColor;
             }
-            UpdateButton("passthrough", passthroughText, passthroughColor);
+            UpdateButton("passthrough", "PASSTHROUGH", passthroughText, passthroughColor);
 
             UpdateButton(
                 "video",
+                "VR VIEW VIDEO",
                 VrViewRecordingHotkey.IsRecording
-                    ? "VR VIEW VIDEO\nRECORDING - GAZE TO STOP"
-                    : "VR VIEW VIDEO\nIDLE - GAZE TO RECORD",
+                    ? "RECORDING  ·  GAZE TO STOP"
+                    : "IDLE  ·  GAZE TO RECORD",
                 VrViewRecordingHotkey.IsRecording ? RecordingColor : ReadyColor);
 
             CaptureSessionManager capture = CaptureSessionManager.Instance;
             bool trialActive = capture != null && capture.IsRecording;
             UpdateButton(
                 "trial",
+                "TRIAL CAPTURE",
                 trialActive
-                    ? "TRIAL CAPTURE\nRECORDING - GAZE TO FINALIZE"
-                    : "TRIAL CAPTURE\nREADY - GAZE TO START",
+                    ? "RECORDING  ·  GAZE TO STOP"
+                    : "READY  ·  GAZE TO START",
                 trialActive ? RecordingColor : ReadyColor);
             UpdateButton(
                 "marker",
+                "EVENT MARKER",
                 trialActive
-                    ? "EVENT MARKER\nREADY - GAZE TO ADD"
-                    : "EVENT MARKER\nSTART A TRIAL FIRST",
+                    ? "READY  ·  GAZE TO ADD"
+                    : "START A TRIAL FIRST",
                 trialActive ? ActiveColor : UnavailableColor);
-            UpdateButton("reset", "RESET SCENE\nGAZE TO RESTORE OBJECTS", WarningColor);
-            UpdateButton("recalibrate", "RECALIBRATE\nGAZE TO START V/B/P POSES", ReadyColor);
+            UpdateButton("reset", "RESET SCENE", "GAZE TO RESTORE OBJECTS", WarningColor);
+            UpdateButton("recalibrate", "RECALIBRATE", "GAZE TO START V/B/P POSES", ReadyColor);
 
             if (noticeText != null)
             {
                 noticeText.text = notice;
+                FitTextToWidth(noticeText, 8.4f);
             }
         }
 
-        private void UpdateButton(string id, string content, Color color)
+        private void UpdateButton(string id, string title, string status, Color color)
         {
             for (int index = 0; index < buttons.Count; index++)
             {
@@ -420,9 +511,76 @@ namespace VRGloveDataCapture.UserInterface
                     continue;
                 }
 
-                button.Label.text = content;
+                button.Title.text = title;
+                button.Status.text = status;
                 button.Material.color = color;
+                FitButtonText(button);
                 return;
+            }
+        }
+
+        private static void FitButtonText(ButtonView button)
+        {
+            if (button == null || button.Surface == null)
+            {
+                return;
+            }
+
+            FitTextToRenderer(button.Title, button.Surface, 0.88f, 0.36f);
+            FitTextToRenderer(button.Status, button.Surface, 0.88f, 0.30f);
+        }
+
+        private static void FitTextToRenderer(
+            TextMesh text,
+            Renderer container,
+            float widthFraction,
+            float heightFraction)
+        {
+            if (text == null || container == null)
+            {
+                return;
+            }
+
+            Renderer textRenderer = text.GetComponent<Renderer>();
+            if (textRenderer == null)
+            {
+                return;
+            }
+
+            text.transform.localScale = Vector3.one;
+            Bounds textBounds = textRenderer.bounds;
+            Bounds containerBounds = container.bounds;
+            if (textBounds.size.x <= 0.0001f || textBounds.size.y <= 0.0001f)
+            {
+                return;
+            }
+
+            float widthScale = containerBounds.size.x * widthFraction / textBounds.size.x;
+            float heightScale = containerBounds.size.y * heightFraction / textBounds.size.y;
+            float scale = Mathf.Min(1.0f, widthScale, heightScale);
+            text.transform.localScale = Vector3.one * Mathf.Max(0.05f, scale);
+        }
+
+        private static void FitTextToWidth(TextMesh text, float localWidth)
+        {
+            if (text == null)
+            {
+                return;
+            }
+
+            Renderer renderer = text.GetComponent<Renderer>();
+            if (renderer == null)
+            {
+                return;
+            }
+
+            text.transform.localScale = Vector3.one;
+            float worldWidth = text.transform.parent == null
+                ? localWidth
+                : text.transform.parent.TransformVector(Vector3.right * localWidth).magnitude;
+            if (renderer.bounds.size.x > worldWidth && renderer.bounds.size.x > 0.0001f)
+            {
+                text.transform.localScale = Vector3.one * (worldWidth / renderer.bounds.size.x);
             }
         }
 
@@ -668,6 +826,13 @@ namespace VRGloveDataCapture.UserInterface
                     Destroy(ownedMaterials[index]);
                 }
             }
+            for (int index = 0; index < ownedMeshes.Count; index++)
+            {
+                if (ownedMeshes[index] != null)
+                {
+                    Destroy(ownedMeshes[index]);
+                }
+            }
 
             panelRoot = null;
             mainStateRoot = null;
@@ -678,6 +843,7 @@ namespace VRGloveDataCapture.UserInterface
             originalMainChildren.Clear();
             buttons.Clear();
             ownedMaterials.Clear();
+            ownedMeshes.Clear();
             noticeText = null;
         }
 

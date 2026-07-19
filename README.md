@@ -17,7 +17,7 @@
 - 在厂商解算结果上开放手指 **外展/内收（abduction/adduction）**，改善拇指与小指对指能力。
 - 支持可选的 **PIP–DIP 比例耦合**，在传感器数量有限时获得更稳定的指尖姿态。
 - 提供 **手–物体自适应视觉接触**：自由空间保持手套姿态，接触后把将要穿入刚体的可视指骨截停在物体表面；源骨骼、校准、抓取状态和采集数据保持不变。
-- 使用 VIVE Pro 2 前置摄像头实现实验性的 **video see-through** 混合现实透视。
+- 使用 VIVE Pro 2 前置双摄像头实现实验性的 **stereo video see-through**：识别 OpenVR 上下双目布局，分别绘制为左右眼现实背景。
 - 使用 Unity Recorder 在 Editor Play Mode 中录制 **VR 第一视角 MP4**。
 - 提供可在 **Scene View 直接编辑**的机器人操作任务场景，包括球入桶、杯放定位垫、罐入箱和颜色分类。
 - 将新增任务接入 Hi5 原场景的统一复位消息和实体复位按钮。
@@ -95,6 +95,7 @@ flowchart LR
 7. **原始值不造假**：解算后的骨骼/关节姿态与九轴原始 IMU 分流记录；缺少厂商原始接口时显式标记不可用。
 8. **视觉接触与测量隔离**：接触求解器只修改 `Hi5_Hand_Visible_Hand` 的最终显示 Transform；统一采集继续读取 `HI5_InertiaInstance.HandBones`，不会把表面贴合伪装成手套测量。
 9. **原厂注视链路复用**：功能面板的碰撞区动态挂接厂商 `VRInteractiveItem`，选择进度继续由原场景 `VREyeRaycaster` 和 `SelectionRadial` 驱动；厂商源码和场景文件均不改写。
+10. **Hi5 安全退出顺序**：Editor 在 `ExitingPlayMode` 先结束厂商托管轮询线程，再关闭原生 dongle，规避 Unity 2019 退出时的原生访问冲突；原厂源码仍保持不变。
 
 ## 主要功能
 
@@ -103,7 +104,7 @@ flowchart LR
 | **Hi5 手指外展/内收解锁** | Play Mode 自动启用 | 关闭厂商 `finger ADB fixed`，保留手指横向自由度 | [FINGER_KINEMATICS.md](docs/FINGER_KINEMATICS.md) |
 | **PIP–DIP 耦合** | 可选，需要在手骨骼根节点配置组件 | 按比例约束 DIP 屈伸，同时保留其他旋转分量 | [FINGER_KINEMATICS.md](docs/FINGER_KINEMATICS.md) |
 | **手–物体自适应视觉接触** | Play Mode 自动安装到左右可视手 | 手套目标将穿入刚体时，逐指骨贴合表面；不改校准、抓取和采集源 | [HAND_OBJECT_CONTACT.md](docs/HAND_OBJECT_CONTACT.md) |
-| **VIVE 视频透视** | Play Mode 按 `P` 开关，默认关闭 | 将 OpenVR Tracked Camera 视频合成到虚拟物体之后 | [MIXED_REALITY.md](docs/MIXED_REALITY.md) |
+| **VIVE 双目视频透视** | Play Mode 按 `P` 开关，默认关闭 | 拆分 OpenVR `VerticalStereo` 纹理，将左右现实画面作为各自眼睛背景，虚拟物体按 Unity 深度绘制在前方 | [MIXED_REALITY.md](docs/MIXED_REALITY.md) |
 | **VR 第一视角录像** | Editor Play Mode 按 `F9` 开始/停止 | `Recordings/vr_view_*.mp4` | [VR_VIEW_RECORDING.md](docs/VR_VIEW_RECORDING.md) |
 | **统一实验数据采集** | `Capture Control` 配置；Play Mode 按 `F12` 启停 trial、`F11` 标记 | `Captures/participants/<ID>/sessions/...` 下的 CSV、事件、manifest、校验和与同步 MP4 | [DATA_CAPTURE.md](docs/DATA_CAPTURE.md) |
 | **机器人抓取任务台** | 打开项目自有 `PickPlaceTasks` 场景，可在 Scene View 编辑 | 5 个可抓物体、5 个目标区及任务完成反馈 | [PICK_PLACE_TASKS.md](docs/PICK_PLACE_TASKS.md) |
@@ -398,7 +399,11 @@ UnifiedCaptureSmokeTests.TrialFinalizesAtomicMachineReadableStreamsAndManifest
 
 ### 按 `P` 后没有真实世界画面
 
-检查 SteamVR 的 Camera 权限并重启 SteamVR。`Passthrough is ready` 只表示组件安装完成，只有 `Passthrough Streaming: LIVE` 才表示收到了连续图像。
+检查 SteamVR 的 Camera 权限并重启 SteamVR。`Passthrough is ready` 只表示组件安装完成，只有 `Passthrough Streaming: LIVE` 才表示收到了连续图像。VIVE Pro 2 的正常日志还应包含 `2 camera(s), VerticalStereo`；左右眼应各显示一个现实背景，而不是左眼显示上下两幅图、右眼仍为纯虚拟场景。
+
+### 点击 Play 三角退出时 Unity Editor 整体崩溃
+
+这是退出 Play Mode，不是正常的 Editor 退出操作。若 Windows Application Event 显示 `Unity.exe` 在 `VCRUNTIME140.dll` 中发生 `0xc0000005`，通常是 Hi5 原生 dongle 被关闭时托管读取线程仍在执行。项目的 `Hi5EditorPlayModeShutdownGuard` 会在 `ExitingPlayMode` 先等待读取线程退出，再交还原厂关闭流程；正常退出时 Console 会记录 `Hi5 polling stopped safely before leaving Play Mode`。该保护只在 Editor 生效，不改手套校准、运行期数据或厂商源码。
 
 ### 按 `F9` 没有开始录像
 

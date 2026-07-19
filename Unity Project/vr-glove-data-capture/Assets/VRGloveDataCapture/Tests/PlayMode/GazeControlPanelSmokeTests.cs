@@ -93,6 +93,23 @@ namespace VRGloveDataCapture.Tests
             Assert.IsTrue(controller.IsFeaturePanelVisible,
                 "The function panel did not unlock after real Hi5 calibration completion.");
 
+            for (int frame = 0; frame < 12; frame++)
+            {
+                yield return null;
+            }
+
+            Transform background = panelRoot.transform.Find("Background");
+            Assert.IsNotNull(background, "The light control-panel background was not created.");
+            MeshRenderer backgroundRenderer = background.GetComponent<MeshRenderer>();
+            Assert.IsNotNull(backgroundRenderer, "The control-panel background has no renderer.");
+            Color backgroundColor = backgroundRenderer.sharedMaterial.color;
+            Assert.Greater(ColorLuminance(backgroundColor), 0.85f,
+                "The redesigned panel background is not gray-white.");
+            MeshFilter backgroundMesh = background.GetComponent<MeshFilter>();
+            Assert.IsNotNull(backgroundMesh, "The panel background has no rounded mesh.");
+            Assert.Greater(backgroundMesh.sharedMesh.vertexCount, 8,
+                "The panel background is still a square four-corner quad.");
+
             GazeDwellButton[] gazeButtons = panelRoot.GetComponentsInChildren<GazeDwellButton>(true);
             Assert.AreEqual(6, gazeButtons.Length, "Expected six gaze-operated function controls.");
             HashSet<string> expectedIds = new HashSet<string>
@@ -108,6 +125,30 @@ namespace VRGloveDataCapture.Tests
                 Assert.IsNotNull(button.GetComponent<BoxCollider>(), button.ActionId + " has no gaze collider.");
                 Assert.IsNotNull(button.GetComponent(interactiveItemType),
                     button.ActionId + " is not connected to the vendor eye raycaster.");
+
+                Transform surfaceTransform = button.transform.Find("Surface");
+                Assert.IsNotNull(surfaceTransform, button.ActionId + " has no visible surface.");
+                MeshRenderer surface = surfaceTransform.GetComponent<MeshRenderer>();
+                MeshFilter mesh = surfaceTransform.GetComponent<MeshFilter>();
+                Assert.IsNotNull(surface, button.ActionId + " has no surface renderer.");
+                Assert.IsNotNull(mesh, button.ActionId + " has no rounded surface mesh.");
+                Assert.Greater(mesh.sharedMesh.vertexCount, 8,
+                    button.ActionId + " still uses a sharp-cornered quad.");
+
+                TextMesh[] labels = button.GetComponentsInChildren<TextMesh>(true);
+                Assert.AreEqual(2, labels.Length,
+                    button.ActionId + " should separate its title and compact status line.");
+                for (int labelIndex = 0; labelIndex < labels.Length; labelIndex++)
+                {
+                    TextMesh label = labels[labelIndex];
+                    Assert.Less(ColorLuminance(label.color), 0.55f,
+                        button.ActionId + " text is not gray-black.");
+                    Renderer labelRenderer = label.GetComponent<Renderer>();
+                    Assert.LessOrEqual(
+                        labelRenderer.bounds.size.x,
+                        surface.bounds.size.x * 0.9f + 0.01f,
+                        button.ActionId + " text overflows the rounded button.");
+                }
             }
             Assert.AreEqual(0, expectedIds.Count, "One or more function controls were not created.");
 
@@ -123,6 +164,31 @@ namespace VRGloveDataCapture.Tests
             }
             Assert.IsNotNull(passthrough, "The passthrough installer did not bind to the stereo camera.");
             passthrough.SetPassthroughEnabled(false);
+
+            FieldInfo materialField = typeof(SteamVrPassthroughEffect).GetField(
+                "backgroundMaterial",
+                BindingFlags.NonPublic | BindingFlags.Instance);
+            Material backgroundMaterial = materialField.GetValue(passthrough) as Material;
+            Assert.IsNotNull(backgroundMaterial, "The passthrough background material was not created.");
+            Assert.AreEqual(
+                "Hidden/VRGloveDataCapture/PassthroughBackground",
+                backgroundMaterial.shader.name,
+                "Passthrough is still using the one-eye post-processing shader.");
+
+            Texture2D syntheticStereoFrame = new Texture2D(16, 32, TextureFormat.RGBA32, false);
+            MethodInfo detectFrameLayout = typeof(SteamVrPassthroughEffect).GetMethod(
+                "DetectFrameLayout",
+                BindingFlags.NonPublic | BindingFlags.Instance);
+            detectFrameLayout.Invoke(passthrough, new object[] { syntheticStereoFrame });
+            Assert.AreEqual(2, passthrough.DetectedCameraCount,
+                "A top/bottom stereo camera frame was not detected as two cameras.");
+            Assert.AreEqual("VerticalStereo", passthrough.DetectedFrameLayout,
+                "A top/bottom OpenVR frame will not be split per eye.");
+            UnityEngine.Object.Destroy(syntheticStereoFrame);
+
+            Assert.IsNotNull(
+                FindType("VRGloveDataCapture.EditorTools.Hi5EditorPlayModeShutdownGuard"),
+                "The Hi5 safe Play Mode shutdown guard is not loaded.");
 
             GazeDwellButton passthroughButton = Array.Find(
                 gazeButtons,
@@ -176,6 +242,11 @@ namespace VRGloveDataCapture.Tests
                 }
             }
             return null;
+        }
+
+        private static float ColorLuminance(Color color)
+        {
+            return color.r * 0.2126f + color.g * 0.7152f + color.b * 0.0722f;
         }
     }
 }

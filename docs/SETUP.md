@@ -54,3 +54,4 @@
 - `Passthrough is ready` 只表示组件已装到相机；只有 `Passthrough Streaming: LIVE` 才表示 OpenVR 已返回连续相机帧。
 - VR 录像基于 Unity Recorder `2.2.0-preview.4`，仅在 Unity Editor Play Mode 工作，不属于 Windows Player 运行时录像功能。
 - 手指增强是厂商解算后的约束后处理；它不能从不可观测数据中恢复每个关节的独立真实角度。
+- 若点击 Unity 工具栏 Play 三角退出时整个 Editor 消失，先检查 `%LOCALAPPDATA%/Unity/Editor/Editor.log` 与 Windows Application Event。项目已针对 Hi5 2.0 原厂退出顺序增加 `Hi5EditorPlayModeShutdownGuard`：在 `ExitingPlayMode` 先停止并等待托管轮询线程，再调用原厂关闭连接，避免 `ReadBVHData` 与 `StopHI5Dongle` 并发导致 `VCRUNTIME140.dll` 访问冲突。Console 正常应出现 `Hi5 polling stopped safely before leaving Play Mode`。

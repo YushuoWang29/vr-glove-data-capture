@@ -1,10 +1,11 @@
 using UnityEngine;
+using UnityEngine.Rendering;
 using Valve.VR;
 
 namespace VRGloveDataCapture.MixedReality
 {
     /// <summary>
-    /// Composites the OpenVR HMD tracked-camera stream behind Unity geometry.
+    /// Draws the OpenVR HMD tracked-camera stream as the stereo camera background.
     /// This is experimental video see-through, not optical see-through AR.
     /// </summary>
     [RequireComponent(typeof(Camera))]
@@ -22,6 +23,13 @@ namespace VRGloveDataCapture.MixedReality
             Error
         }
 
+        private enum TrackedCameraLayout
+        {
+            Mono = 0,
+            VerticalStereo = 1,
+            HorizontalStereo = 2
+        }
+
         [SerializeField]
         private bool startEnabled;
 
@@ -36,28 +44,44 @@ namespace VRGloveDataCapture.MixedReality
         private float opacity = 1.0f;
 
         [SerializeField]
+        private bool swapStereoEyes;
+
+        [SerializeField]
         private KeyCode keyboardToggle = KeyCode.P;
 
         [SerializeField]
         [Min(0.1f)]
         private float stalledFrameSeconds = 1.0f;
 
+        private const int OpenVrStereoFlag = 0x0002;
+        private const int OpenVrVerticalFlag = 0x0010;
+        private const int OpenVrHorizontalFlag = 0x0020;
+        private const string CommandBufferName = "VR Glove Stereo Passthrough Background";
+
         private static readonly int CameraTextureId = Shader.PropertyToID("_CameraTex");
         private static readonly int CameraUvTransformId = Shader.PropertyToID("_CameraUvTransform");
+        private static readonly int CameraFrameLayoutId = Shader.PropertyToID("_CameraFrameLayout");
+        private static readonly int SwapStereoEyesId = Shader.PropertyToID("_SwapStereoEyes");
         private static readonly int OpacityId = Shader.PropertyToID("_Opacity");
 
         private Camera targetCamera;
-        private Material compositeMaterial;
+        private Material backgroundMaterial;
+        private Mesh fullscreenMesh;
+        private CommandBuffer backgroundCommands;
         private SteamVR_TrackedCamera.VideoStreamTexture videoSource;
         private bool requested;
         private bool acquired;
+        private bool commandsInstalled;
         private bool cameraOverrideApplied;
+        private bool frameLayoutDetected;
         private CameraClearFlags originalClearFlags;
         private Color originalBackgroundColor;
-        private DepthTextureMode originalDepthTextureMode;
+        private CameraEvent installedCameraEvent = CameraEvent.BeforeForwardOpaque;
         private uint lastFrameId;
         private float lastFrameTime;
         private float nextAcquireAttemptTime;
+        private int detectedCameraCount = 1;
+        private TrackedCameraLayout detectedLayout = TrackedCameraLayout.Mono;
         private PassthroughState state = PassthroughState.Disabled;
         private string status = "Passthrough is disabled.";
 
@@ -86,21 +110,42 @@ namespace VRGloveDataCapture.MixedReality
             get { return lastFrameId; }
         }
 
+        public int DetectedCameraCount
+        {
+            get { return detectedCameraCount; }
+        }
+
+        public string DetectedFrameLayout
+        {
+            get { return detectedLayout.ToString(); }
+        }
+
         private void Awake()
         {
             targetCamera = GetComponent<Camera>();
-            Shader shader = Shader.Find("Hidden/VRGloveDataCapture/PassthroughComposite");
+            Shader shader = Shader.Find("Hidden/VRGloveDataCapture/PassthroughBackground");
             if (shader == null)
             {
                 SetState(PassthroughState.Error,
-                    "Passthrough composite shader was not found.");
+                    "Passthrough background shader was not found.");
                 return;
             }
 
-            compositeMaterial = new Material(shader)
+            backgroundMaterial = new Material(shader)
             {
                 hideFlags = HideFlags.HideAndDontSave
             };
+            fullscreenMesh = BuildFullscreenMesh();
+            backgroundCommands = new CommandBuffer
+            {
+                name = CommandBufferName
+            };
+            backgroundCommands.DrawMesh(
+                fullscreenMesh,
+                Matrix4x4.identity,
+                backgroundMaterial,
+                0,
+                0);
         }
 
         private void OnEnable()
@@ -116,9 +161,19 @@ namespace VRGloveDataCapture.MixedReality
 
         private void OnDestroy()
         {
-            if (compositeMaterial != null)
+            RemoveBackgroundCommands();
+            if (backgroundCommands != null)
             {
-                Destroy(compositeMaterial);
+                backgroundCommands.Release();
+                backgroundCommands = null;
+            }
+            if (backgroundMaterial != null)
+            {
+                Destroy(backgroundMaterial);
+            }
+            if (fullscreenMesh != null)
+            {
+                Destroy(fullscreenMesh);
             }
         }
 
@@ -129,7 +184,7 @@ namespace VRGloveDataCapture.MixedReality
                 TogglePassthrough();
             }
 
-            if (!requested || compositeMaterial == null)
+            if (!requested || backgroundMaterial == null)
             {
                 return;
             }
@@ -153,10 +208,17 @@ namespace VRGloveDataCapture.MixedReality
                 return;
             }
 
-            compositeMaterial.SetTexture(CameraTextureId, texture);
-            compositeMaterial.SetFloat(OpacityId, opacity);
+            if (!frameLayoutDetected)
+            {
+                DetectFrameLayout(texture);
+            }
+            backgroundMaterial.SetTexture(CameraTextureId, texture);
+            backgroundMaterial.SetFloat(OpacityId, opacity);
+            backgroundMaterial.SetFloat(CameraFrameLayoutId, (float)detectedLayout);
+            backgroundMaterial.SetFloat(SwapStereoEyesId, swapStereoEyes ? 1.0f : 0.0f);
             UpdateTextureBounds();
             ApplyCameraOverride();
+            InstallBackgroundCommands();
 
             uint frameId = videoSource.frameId;
             if (frameId != lastFrameId)
@@ -164,8 +226,8 @@ namespace VRGloveDataCapture.MixedReality
                 lastFrameId = frameId;
                 lastFrameTime = Time.unscaledTime;
                 SetState(PassthroughState.Streaming,
-                    "LIVE: VIVE tracked-camera frames are being composited (" +
-                    texture.width + "x" + texture.height + ").");
+                    "LIVE: " + detectedCameraCount + " camera(s), " + detectedLayout +
+                    ", texture " + texture.width + "x" + texture.height + ".");
             }
             else if (Time.unscaledTime - lastFrameTime > stalledFrameSeconds)
             {
@@ -180,8 +242,8 @@ namespace VRGloveDataCapture.MixedReality
         }
 
         /// <summary>
-        /// Enables or disables video see-through. This method can be wired to
-        /// a Unity UI event or a SteamVR input action.
+        /// Enables or disables stereo video see-through. This method can be wired
+        /// to a Unity UI event or a SteamVR input action.
         /// </summary>
         public void SetPassthroughEnabled(bool value)
         {
@@ -227,9 +289,71 @@ namespace VRGloveDataCapture.MixedReality
             acquired = true;
             lastFrameId = 0;
             lastFrameTime = Time.unscaledTime;
+            detectedCameraCount = 1;
+            detectedLayout = TrackedCameraLayout.Mono;
+            frameLayoutDetected = false;
             SetState(PassthroughState.WaitingForFrame,
-                "Tracked-camera service acquired; waiting for video.");
+                "Tracked-camera service acquired; waiting for stereo video.");
             return true;
+        }
+
+        private void DetectFrameLayout(Texture texture)
+        {
+            int cameraCount = 0;
+            int layoutFlags = 0;
+            CVRSystem system = OpenVR.System;
+            if (system != null)
+            {
+                ETrackedPropertyError cameraCountError = ETrackedPropertyError.TrackedProp_Success;
+                cameraCount = system.GetInt32TrackedDeviceProperty(
+                    OpenVR.k_unTrackedDeviceIndex_Hmd,
+                    ETrackedDeviceProperty.Prop_NumCameras_Int32,
+                    ref cameraCountError);
+                if (cameraCountError != ETrackedPropertyError.TrackedProp_Success)
+                {
+                    cameraCount = 0;
+                }
+
+                ETrackedPropertyError layoutError = ETrackedPropertyError.TrackedProp_Success;
+                layoutFlags = system.GetInt32TrackedDeviceProperty(
+                    OpenVR.k_unTrackedDeviceIndex_Hmd,
+                    ETrackedDeviceProperty.Prop_CameraFrameLayout_Int32,
+                    ref layoutError);
+                if (layoutError != ETrackedPropertyError.TrackedProp_Success)
+                {
+                    layoutFlags = 0;
+                }
+            }
+
+            bool stereo = cameraCount > 1 || (layoutFlags & OpenVrStereoFlag) != 0;
+            if (stereo && (layoutFlags & OpenVrVerticalFlag) != 0)
+            {
+                detectedLayout = TrackedCameraLayout.VerticalStereo;
+            }
+            else if (stereo && (layoutFlags & OpenVrHorizontalFlag) != 0)
+            {
+                detectedLayout = TrackedCameraLayout.HorizontalStereo;
+            }
+            else if (stereo && texture != null)
+            {
+                detectedLayout = texture.height > texture.width
+                    ? TrackedCameraLayout.VerticalStereo
+                    : TrackedCameraLayout.HorizontalStereo;
+            }
+            else if (texture != null && texture.height > texture.width * 1.2f)
+            {
+                // Some older OpenVR drivers omit the layout property but still
+                // expose the documented top/bottom stereo texture.
+                detectedLayout = TrackedCameraLayout.VerticalStereo;
+                stereo = true;
+            }
+            else
+            {
+                detectedLayout = TrackedCameraLayout.Mono;
+            }
+
+            detectedCameraCount = cameraCount > 0 ? cameraCount : (stereo ? 2 : 1);
+            frameLayoutDetected = true;
         }
 
         private void SetState(PassthroughState nextState, string nextStatus)
@@ -260,6 +384,7 @@ namespace VRGloveDataCapture.MixedReality
 
         private void ReleaseStream()
         {
+            RemoveBackgroundCommands();
             if (acquired && videoSource != null)
             {
                 videoSource.Release();
@@ -267,9 +392,10 @@ namespace VRGloveDataCapture.MixedReality
 
             acquired = false;
             videoSource = null;
-            if (compositeMaterial != null)
+            frameLayoutDetected = false;
+            if (backgroundMaterial != null)
             {
-                compositeMaterial.SetTexture(CameraTextureId, null);
+                backgroundMaterial.SetTexture(CameraTextureId, null);
             }
         }
 
@@ -290,7 +416,7 @@ namespace VRGloveDataCapture.MixedReality
                 uvTransform = new Vector4(1.0f, -1.0f, 0.0f, 1.0f);
             }
 
-            compositeMaterial.SetVector(CameraUvTransformId, uvTransform);
+            backgroundMaterial.SetVector(CameraUvTransformId, uvTransform);
         }
 
         private void ApplyCameraOverride()
@@ -302,12 +428,8 @@ namespace VRGloveDataCapture.MixedReality
 
             originalClearFlags = targetCamera.clearFlags;
             originalBackgroundColor = targetCamera.backgroundColor;
-            originalDepthTextureMode = targetCamera.depthTextureMode;
             targetCamera.clearFlags = CameraClearFlags.SolidColor;
-            Color transparentBackground = originalBackgroundColor;
-            transparentBackground.a = 0.0f;
-            targetCamera.backgroundColor = transparentBackground;
-            targetCamera.depthTextureMode |= DepthTextureMode.Depth;
+            targetCamera.backgroundColor = Color.black;
             cameraOverrideApplied = true;
         }
 
@@ -320,21 +442,60 @@ namespace VRGloveDataCapture.MixedReality
 
             targetCamera.clearFlags = originalClearFlags;
             targetCamera.backgroundColor = originalBackgroundColor;
-            targetCamera.depthTextureMode = originalDepthTextureMode;
             cameraOverrideApplied = false;
         }
 
-        private void OnRenderImage(RenderTexture source, RenderTexture destination)
+        private void InstallBackgroundCommands()
         {
-            if (requested && acquired && compositeMaterial != null &&
-                compositeMaterial.GetTexture(CameraTextureId) != null)
+            if (commandsInstalled || targetCamera == null || backgroundCommands == null)
             {
-                Graphics.Blit(source, destination, compositeMaterial);
+                return;
             }
-            else
+
+            RenderingPath path = targetCamera.actualRenderingPath;
+            installedCameraEvent = path == RenderingPath.DeferredLighting ||
+                                   path == RenderingPath.DeferredShading
+                ? CameraEvent.BeforeGBuffer
+                : CameraEvent.BeforeForwardOpaque;
+            targetCamera.AddCommandBuffer(installedCameraEvent, backgroundCommands);
+            commandsInstalled = true;
+        }
+
+        private void RemoveBackgroundCommands()
+        {
+            if (!commandsInstalled || targetCamera == null || backgroundCommands == null)
             {
-                Graphics.Blit(source, destination);
+                return;
             }
+
+            targetCamera.RemoveCommandBuffer(installedCameraEvent, backgroundCommands);
+            commandsInstalled = false;
+        }
+
+        private static Mesh BuildFullscreenMesh()
+        {
+            Mesh mesh = new Mesh
+            {
+                name = "VRGlovePassthroughFullscreenQuad",
+                hideFlags = HideFlags.HideAndDontSave,
+                vertices = new[]
+                {
+                    new Vector3(-1.0f, -1.0f, 0.0f),
+                    new Vector3(1.0f, -1.0f, 0.0f),
+                    new Vector3(1.0f, 1.0f, 0.0f),
+                    new Vector3(-1.0f, 1.0f, 0.0f)
+                },
+                uv = new[]
+                {
+                    new Vector2(0.0f, 0.0f),
+                    new Vector2(1.0f, 0.0f),
+                    new Vector2(1.0f, 1.0f),
+                    new Vector2(0.0f, 1.0f)
+                },
+                triangles = new[] { 0, 1, 2, 0, 2, 3 }
+            };
+            mesh.UploadMeshData(true);
+            return mesh;
         }
     }
 }

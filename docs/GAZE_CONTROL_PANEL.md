@@ -48,13 +48,13 @@
 
 | 颜色 | 含义 | 典型状态 |
 |---|---|---|
-| **蓝色** | 可操作、当前未活动 | Passthrough Off、Video Idle、Trial Ready |
-| **绿色** | 功能已活动或当前可执行 | Passthrough Live、Event Marker Ready |
-| **红色** | 正在写入持续性数据 | Video Recording、Trial Recording |
-| **橙色** | 需要谨慎确认或仍在等待 | Scene Reset、Passthrough WaitingForFrame |
-| **灰色** | 当前不可用 | 相机组件尚未安装、无活动 trial 时的 Event Marker |
+| **灰白色** | 可操作、当前未活动 | Passthrough Off、Video Idle、Trial Ready |
+| **浅绿色** | 功能已活动或当前可执行 | Passthrough Live、Event Marker Ready |
+| **浅红色** | 正在写入持续性数据 | Video Recording、Trial Recording |
+| **浅黄色** | 需要谨慎确认或仍在等待 | Scene Reset、Passthrough WaitingForFrame |
+| **浅灰色** | 当前不可用 | 相机组件尚未安装、无活动 trial 时的 Event Marker |
 
-面板底部提示显示最近一次命令的结果。透视按钮中的 **LIVE** 是确认真实世界透视生效的主要判据；`REQUESTED`、`WaitingForSteamVr` 或 `WaitingForFrame` 只表示请求已经发出，不代表已经收到连续视频帧。
+面板采用与原厂白色校准界面接近的 **灰白底、灰黑字、细灰边框和圆角矩形**。每个按钮把功能标题和状态拆成两行，并按按钮渲染边界自动缩放，长状态不会再越出按钮。面板底部提示显示最近一次命令的结果。透视按钮中的 **LIVE** 是确认真实世界透视生效的主要判据；`REQUESTED`、`WaitingForSteamVr` 或 `WaitingForFrame` 只表示请求已经发出，不代表已经收到连续视频帧。
 
 ## 实现边界
 
@@ -89,7 +89,7 @@ Tools > VR Glove Data Capture > Run All Project Play Mode Tests
 GazeControlPanelSmokeTests.PanelPreservesCalibrationAndRoutesVendorGazeToProjectControls
 ```
 
-测试实际加载本地 `TableScene_Vive`，验证原厂校准对象仍存在、六个按钮均接入原厂视线交互、完成注视能够切换透视请求，以及重新校准能够恢复原厂校准界面。当前完整结果为 **4 项通过、0 失败、0 跳过**。
+测试实际加载本地 `TableScene_Vive`，验证原厂校准对象仍存在、六个按钮均接入原厂视线交互、完成注视能够切换透视请求，以及重新校准能够恢复原厂校准界面。视觉断言还会检查背景亮度、灰黑文字、圆角网格和文字不越界；透视断言会检查 `VerticalStereo` 上下双目识别。当前完整结果为 **4 项通过、0 失败、0 跳过**。
 
 ### 头显验收
 

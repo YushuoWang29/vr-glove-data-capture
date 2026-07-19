@@ -11,9 +11,10 @@ HTC 官方说明确认 VIVE Pro 2 提供双摄像头，需在 SteamVR 的 `Setti
 1. `SteamVrPassthroughAutoInstaller` 在运行时寻找当前主相机或立体相机。
 2. 它添加 `SteamVrPassthroughEffect`，但默认保持关闭，避免改变现有校准 demo。
 3. 按键盘 `P` 后，组件通过 `SteamVR_TrackedCamera.Source(true)` 获取 HMD 的去畸变视频流。
-4. 相机背景改为透明纯色并请求深度纹理。
-5. `VRGlovePassthrough.shader` **只使用相机深度缓冲判断虚拟几何覆盖率**：远平面像素显示真实视频，存在 Unity 几何的像素显示虚拟手和物体。不能使用 Game View Alpha 作为遮罩，因为 XR 渲染目标的 Alpha 可能恒为 1，导致相机画面被完全盖住。
-6. 再按 `P` 会对称释放视频服务，并恢复原 Camera 设置。
+4. 组件读取 OpenVR 的 `Prop_NumCameras_Int32` 与 `Prop_CameraFrameLayout_Int32`。VIVE Pro 2 实测纹理为 `1224×1840`，对应 `VerticalLayout`；OpenVR 对该布局的定义是 **上/下 = 左/右眼**，因此必须先按眼拆分，不能把整张纹理当作单目画面。
+5. `VRGlovePassthrough.shader` 通过目标 VR Camera 的背景 CommandBuffer（Forward 使用 `BeforeForwardOpaque`，Deferred 使用 `BeforeGBuffer`）**分别为左右眼绘制现实背景**。虚拟手、交互物体和 UI 随后继续走 Unity 原有深度与透明渲染，因此自然显示在现实背景前方。
+6. 这一实现不再依赖只作用于单眼的 `OnRenderImage` 后处理，也不使用 XR RenderTexture 不可靠的 Alpha 通道作为遮罩。
+7. 再按 `P` 会移除背景 CommandBuffer、对称释放视频服务，并恢复原 Camera 设置。
 
 核心文件：
 
@@ -34,7 +35,7 @@ Assets/VRGloveDataCapture/Runtime/MixedReality/
 6. 等待 SteamVR 状态变为 **Ready**，在 Unity 执行 `Tools > VR Glove Data Capture > VR Runtime > Validate SteamVR and HMD`。
 7. 检查通过后启动 Unity Play Mode，等待 Console 出现 `Passthrough is ready ... press P to toggle it`。这只表示组件安装完成，不代表摄像头已经出帧。
 8. 按 `P` 或在完整校准后注视 **PASSTHROUGH**，观察状态依次进入 `WaitingForSteamVr`、`WaitingForFrame` 和 `Streaming`。
-9. 以 `Passthrough Streaming: LIVE: VIVE tracked-camera frames are being composited (宽x高)` 作为**软件已经收到连续相机帧**的判据；同时确认真实画面在背景、虚拟手和交互物品在前景。
+9. 以 `Passthrough Streaming: LIVE: 2 camera(s), VerticalStereo, texture 1224x1840` 一类日志作为**软件已经收到连续双目相机帧并识别布局**的判据；同时确认左、右眼各自只看到一个现实画面，真实画面在背景、虚拟手和交互物品在前景。
 
 `SteamVrPassthroughEffect.SetPassthroughEnabled(bool)` 和 `TogglePassthrough()` 是公共方法，可直接连接 Unity UI 或后续 SteamVR Input Action，不依赖键盘。
 
@@ -58,13 +59,13 @@ Assets/VRGloveDataCapture/Runtime/MixedReality/
 - OpenVR 返回视频纹理和采集时 HMD 位姿，但本版本没有完成双目相机内参、眼–相机外参和逐眼重投影；真实视频与虚拟物体可能存在视差、尺度和边缘配准误差。
 - 它没有真实环境深度，因此真实物体不能正确遮挡虚拟手；虚拟几何始终按照 Unity 深度覆盖在视频上。
 - 相机曝光、延迟、帧率和视场角与人眼不同，快速转头时可能出现明显滞后。
-- Unity 2019 的 VR 后处理路径和 SteamVR 渲染模式可能影响 `OnRenderImage`；当前固定基线应优先使用 Built-in Render Pipeline/OpenVR 的既有配置。
+- 当前背景路径兼容项目固定的 **Built-in Render Pipeline + OpenVR Multi Pass** 配置；不要把 `ProjectSettings` 中的 Stereo Rendering Path 当作普通画质选项随意修改。
 - 代码编译成功只能验证 API、Shader 与程序集路径正确；相机权限、USB 链路、SteamVR 服务和实际光学观感必须在连接 VIVE Pro 2 后以 `Streaming: LIVE` 日志和头显画面共同验收。
 - 该功能不能替代安全监护。移动、抓取真实物体和涉及机械设备的实验仍应保留实体边界和现场保护措施。
 
 ## 与 VR 视角录像联动
 
-透视进入 `Streaming` 后按 `F9`，Unity Recorder 会录制 Game View 中已完成合成的画面，因此 MP4 应同时包含真实背景、虚拟手和虚拟物体。录像操作、输出位置与边界见 [VR_VIEW_RECORDING.md](VR_VIEW_RECORDING.md)。
+透视进入 `Streaming` 后按 `F9`，Unity Recorder 会录制 Game View 中已完成合成的画面，因此 MP4 应同时包含真实背景、虚拟手和虚拟物体。录像只保存项目配置的 VR View 视角，不会把上下堆叠的原始双目纹理直接写入 MP4。录像操作、输出位置与边界见 [VR_VIEW_RECORDING.md](VR_VIEW_RECORDING.md)。
 
 ## 后续升级路径
 
