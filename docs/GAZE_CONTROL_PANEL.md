@@ -6,6 +6,8 @@
 
 该功能不会修改 `Assets/NoitomHi5`、`Assets/Hi5_Interaction_SDK` 或原厂 `.unity` 场景。运行时安装器仅在检测到原厂 `MenuStateMachine`、`VREyeRaycaster`、`SelectionRadial` 和 `VRInteractiveItem` 后创建面板，因此没有加载原厂 UI 的其他场景不会出现空面板。
 
+进入场景且尚未显示功能面板时，原厂主入口保持为从左到右的 **Calibrate、Reconnect、Interaction**。原厂资源中的遗留 `Interaction` 对象默认与 `Reconnect` 占用同一位置，且仍绑定 `ReConnect` 状态；项目适配器会在运行时把它移动到 `Reconnect` 右侧、复制原 `Close` 槽位的 Interaction/Exit 状态，并停用被替代的 `Close` 入口。该处理只改变当前 Play Mode 实例，不保存或改写原厂 Scene。
+
 ## 使用流程
 
 ### 首次校准
@@ -65,6 +67,7 @@
 - 原厂 `VRInteractiveItem` 仍负责 `OnOver` / `OnOut` 焦点事件。
 - 原厂 `SelectionRadial` 仍负责等待、进度显示和完成事件。
 - 原厂状态面板、校准入口和校准数据保存逻辑没有被删除或替换。
+- 原厂主入口的 `Reconnect` 保持原位置；`Interaction` 使用其右侧独立碰撞区，注视两者不会再命中同一个按钮。
 
 ### 项目扩展行为
 
@@ -89,16 +92,17 @@ Tools > VR Glove Data Capture > Run All Project Play Mode Tests
 GazeControlPanelSmokeTests.PanelPreservesCalibrationAndRoutesVendorGazeToProjectControls
 ```
 
-测试实际加载本地 `TableScene_Vive`，验证原厂校准对象仍存在、六个按钮均接入原厂视线交互、完成注视能够切换透视请求，以及重新校准能够恢复原厂校准界面。视觉断言还会检查背景亮度、灰黑文字、圆角网格和文字不越界；透视断言会检查 `VerticalStereo` 上下双目识别。当前完整结果为 **4 项通过、0 失败、0 跳过**。
+测试实际加载本地 `TableScene_Vive`，验证原厂校准对象仍存在、`Interaction` 位于 `Reconnect` 右侧且碰撞体不重叠、入口绑定 Interaction/Exit 状态、六个功能按钮均接入原厂视线交互、完成注视能够切换透视请求，以及重新校准能够恢复经过适配的原厂主界面。视觉断言还会检查背景亮度、灰黑文字、圆角网格和文字不越界；透视断言会检查 `VerticalStereo` 的左右眼区域映射及各眼内部 180° 旋转不越区。当前完整结果为 **4 项通过、0 失败、0 跳过**。
 
 ### 头显验收
 
-1. 完成 P-pose 后确认功能面板自动出现，原厂圆形视线进度仍可见。
-2. 注视 **PASSTHROUGH**，等待按钮显示 `LIVE`，确认能看到真实环境和虚拟物体叠加。
-3. 注视 **VR VIEW VIDEO** 开始和停止一次录制，检查 `Recordings/` 中 MP4 能正常播放。
-4. 在 `Capture Control` 配置元数据后注视 **TRIAL CAPTURE**，添加一次 **EVENT MARKER**，再停止 trial；检查 `COMPLETE` 和 `events/events.csv`。
-5. 移动物体后注视 **RESET SCENE**，确认原厂物体和 pick-and-place 物体同时复位。
-6. 注视 **RECALIBRATE**，确认功能面板消失、原厂 V/B/P-pose 页面恢复，完成后功能面板再次出现。
+1. 刚进入 Play Mode 时确认 `Reconnect` 居中、`Interaction` 位于其右侧；分别注视后应进入各自状态，`Interaction` 不再触发 Reconnect。
+2. 完成 P-pose 后确认功能面板自动出现，原厂圆形视线进度仍可见。
+3. 注视 **PASSTHROUGH**，等待按钮显示 `LIVE`，确认能看到真实环境和虚拟物体叠加。
+4. 注视 **VR VIEW VIDEO** 开始和停止一次录制，检查 `Recordings/` 中 MP4 能正常播放。
+5. 在 `Capture Control` 配置元数据后注视 **TRIAL CAPTURE**，添加一次 **EVENT MARKER**，再停止 trial；检查 `COMPLETE` 和 `events/events.csv`。
+6. 移动物体后注视 **RESET SCENE**，确认原厂物体和 pick-and-place 物体同时复位。
+7. 注视 **RECALIBRATE**，确认功能面板消失、原厂 V/B/P-pose 页面恢复，完成后功能面板再次出现。
 
 ## 常见问题
 

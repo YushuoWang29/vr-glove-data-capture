@@ -70,6 +70,37 @@ namespace VRGloveDataCapture.Tests
             Assert.IsNotNull(FindSceneObject("Calibration"), "The vendor calibration state was removed.");
             Assert.IsNotNull(FindSceneObject("Btn_Calibrate"), "The original gaze calibration entry was removed.");
 
+            FieldInfo mainRootField = typeof(GazeFunctionPanelController).GetField(
+                "mainStateRoot",
+                BindingFlags.NonPublic | BindingFlags.Instance);
+            Transform mainRoot = mainRootField.GetValue(controller) as Transform;
+            Assert.IsNotNull(mainRoot, "The project did not bind to the vendor Main menu state.");
+            Transform reconnectEntry = mainRoot.Find("Btn_Reconnect");
+            Transform interactionEntry = mainRoot.Find("Btn_Help");
+            Transform closeEntry = mainRoot.Find("Btn_Close");
+            Assert.IsNotNull(reconnectEntry, "The vendor Reconnect entry is missing.");
+            Assert.IsNotNull(interactionEntry, "The vendor Interaction entry is missing.");
+            Assert.IsNotNull(closeEntry, "The vendor Close entry is missing.");
+            Assert.IsTrue(interactionEntry.gameObject.activeSelf,
+                "The adapted Interaction entry is not available before calibration.");
+            Assert.IsFalse(closeEntry.gameObject.activeSelf,
+                "The old Close entry was not replaced by Interaction.");
+            Assert.That(interactionEntry.localPosition.x,
+                Is.EqualTo(closeEntry.localPosition.x).Within(0.001f),
+                "Interaction was not moved into the right-hand menu slot.");
+            BoxCollider reconnectEntryCollider = reconnectEntry.GetComponent<BoxCollider>();
+            BoxCollider interactionEntryCollider = interactionEntry.GetComponent<BoxCollider>();
+            Assert.IsNotNull(reconnectEntryCollider, "Reconnect has no gaze collider.");
+            Assert.IsNotNull(interactionEntryCollider, "Interaction has no gaze collider.");
+            float entryCenterDistance = Mathf.Abs(
+                interactionEntry.localPosition.x - reconnectEntry.localPosition.x);
+            float requiredSeparation =
+                (reconnectEntryCollider.size.x + interactionEntryCollider.size.x) * 0.5f;
+            Assert.GreaterOrEqual(entryCenterDistance, requiredSeparation,
+                "Reconnect and Interaction gaze colliders overlap.");
+            Assert.AreEqual("Exit", ReadEnumField(interactionEntry.gameObject, "EnterState"),
+                "Gazing Interaction still invokes ReConnect instead of entering interaction mode.");
+
             // Hardware-free test: drive the real production completion detector
             // through the vendor manager field instead of directly forcing UI state.
             Type managerType = FindType("HI5.HI5_Manager_Thread");
@@ -186,6 +217,45 @@ namespace VRGloveDataCapture.Tests
                 "A top/bottom OpenVR frame will not be split per eye.");
             UnityEngine.Object.Destroy(syntheticStereoFrame);
 
+            Vector2 negativeVScale = new Vector2(1.0f, -1.0f);
+            Vector2 leftPackedBottom = SteamVrPassthroughEffect.CalculateStereoLayoutUv(
+                Vector2.zero,
+                0,
+                SteamVrPassthroughEffect.StereoFrameLayout.VerticalStereo,
+                false,
+                SteamVrPassthroughEffect.PerEyeOrientation.Normal,
+                negativeVScale);
+            Vector2 rightPackedBottom = SteamVrPassthroughEffect.CalculateStereoLayoutUv(
+                Vector2.zero,
+                1,
+                SteamVrPassthroughEffect.StereoFrameLayout.VerticalStereo,
+                false,
+                SteamVrPassthroughEffect.PerEyeOrientation.Normal,
+                negativeVScale);
+            Assert.That(leftPackedBottom.y, Is.EqualTo(0.5f).Within(0.0001f),
+                "The left eye does not select OpenVR's top/left camera after the Valve V flip.");
+            Assert.That(rightPackedBottom.y, Is.EqualTo(0.0f).Within(0.0001f),
+                "The right eye does not select OpenVR's bottom/right camera after the Valve V flip.");
+            Vector2 rotatedLeft = SteamVrPassthroughEffect.CalculateStereoLayoutUv(
+                new Vector2(0.2f, 0.3f),
+                0,
+                SteamVrPassthroughEffect.StereoFrameLayout.VerticalStereo,
+                false,
+                SteamVrPassthroughEffect.PerEyeOrientation.Rotate180,
+                negativeVScale);
+            Assert.GreaterOrEqual(rotatedLeft.y, 0.5f,
+                "Per-eye rotation exchanged the two camera regions.");
+            Assert.LessOrEqual(rotatedLeft.y, 1.0f,
+                "Per-eye rotation escaped the left camera region.");
+            Assert.IsTrue(
+                SteamVrPassthroughEffect.RequiresInstancedStereoDraw(
+                    UnityEngine.XR.XRSettings.StereoRenderingMode.SinglePassInstanced),
+                "Single Pass Instanced would still submit only one background instance.");
+            Assert.IsFalse(
+                SteamVrPassthroughEffect.RequiresInstancedStereoDraw(
+                    UnityEngine.XR.XRSettings.StereoRenderingMode.MultiPass),
+                "Multi Pass must not receive a doubled background draw.");
+
             Assert.IsNotNull(
                 FindType("VRGloveDataCapture.EditorTools.Hi5EditorPlayModeShutdownGuard"),
                 "The Hi5 safe Play Mode shutdown guard is not loaded.");
@@ -213,7 +283,35 @@ namespace VRGloveDataCapture.Tests
                 "The function panel remained visible over the original calibration flow.");
             Assert.IsTrue(FindSceneObject("Calibration").activeInHierarchy,
                 "Recalibration did not restore the original vendor calibration panel.");
+            Assert.IsTrue(interactionEntry.gameObject.activeSelf,
+                "Interaction was not restored when the feature panel was hidden.");
+            Assert.IsFalse(closeEntry.gameObject.activeSelf,
+                "The replaced Close entry was incorrectly restored.");
             completionField.SetValue(manager, originalCompletion);
+        }
+
+        private static string ReadEnumField(GameObject target, string fieldName)
+        {
+            MonoBehaviour[] behaviours = target.GetComponents<MonoBehaviour>();
+            for (int index = 0; index < behaviours.Length; index++)
+            {
+                MonoBehaviour behaviour = behaviours[index];
+                if (behaviour == null)
+                {
+                    continue;
+                }
+
+                FieldInfo field = behaviour.GetType().GetField(
+                    fieldName,
+                    BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+                if (field != null && field.FieldType.IsEnum)
+                {
+                    object value = field.GetValue(behaviour);
+                    return value == null ? string.Empty : value.ToString();
+                }
+            }
+
+            return string.Empty;
         }
 
         private static GameObject FindSceneObject(string objectName)

@@ -1,5 +1,6 @@
 using UnityEngine;
 using UnityEngine.Rendering;
+using UnityEngine.XR;
 using Valve.VR;
 
 namespace VRGloveDataCapture.MixedReality
@@ -12,6 +13,19 @@ namespace VRGloveDataCapture.MixedReality
     [DisallowMultipleComponent]
     public sealed class SteamVrPassthroughEffect : MonoBehaviour
     {
+        public enum StereoFrameLayout
+        {
+            Mono = 0,
+            VerticalStereo = 1,
+            HorizontalStereo = 2
+        }
+
+        public enum PerEyeOrientation
+        {
+            Normal = 0,
+            Rotate180 = 1
+        }
+
         public enum PassthroughState
         {
             Disabled,
@@ -21,13 +35,6 @@ namespace VRGloveDataCapture.MixedReality
             Streaming,
             FrameStalled,
             Error
-        }
-
-        private enum TrackedCameraLayout
-        {
-            Mono = 0,
-            VerticalStereo = 1,
-            HorizontalStereo = 2
         }
 
         [SerializeField]
@@ -47,7 +54,13 @@ namespace VRGloveDataCapture.MixedReality
         private bool swapStereoEyes;
 
         [SerializeField]
+        private PerEyeOrientation perEyeOrientation = PerEyeOrientation.Normal;
+
+        [SerializeField]
         private KeyCode keyboardToggle = KeyCode.P;
+
+        [SerializeField]
+        private KeyCode orientationToggle = KeyCode.O;
 
         [SerializeField]
         [Min(0.1f)]
@@ -62,6 +75,7 @@ namespace VRGloveDataCapture.MixedReality
         private static readonly int CameraUvTransformId = Shader.PropertyToID("_CameraUvTransform");
         private static readonly int CameraFrameLayoutId = Shader.PropertyToID("_CameraFrameLayout");
         private static readonly int SwapStereoEyesId = Shader.PropertyToID("_SwapStereoEyes");
+        private static readonly int RotateEachEye180Id = Shader.PropertyToID("_RotateEachEye180");
         private static readonly int OpacityId = Shader.PropertyToID("_Opacity");
 
         private Camera targetCamera;
@@ -81,7 +95,10 @@ namespace VRGloveDataCapture.MixedReality
         private float lastFrameTime;
         private float nextAcquireAttemptTime;
         private int detectedCameraCount = 1;
-        private TrackedCameraLayout detectedLayout = TrackedCameraLayout.Mono;
+        private StereoFrameLayout detectedLayout = StereoFrameLayout.Mono;
+        private Vector4 currentUvTransform = new Vector4(1.0f, -1.0f, 0.0f, 1.0f);
+        private bool singlePassInstancedBackground;
+        private string stereoDrawMode = "Standard";
         private PassthroughState state = PassthroughState.Disabled;
         private string status = "Passthrough is disabled.";
 
@@ -120,6 +137,16 @@ namespace VRGloveDataCapture.MixedReality
             get { return detectedLayout.ToString(); }
         }
 
+        public string CurrentPerEyeOrientation
+        {
+            get { return perEyeOrientation.ToString(); }
+        }
+
+        public string CurrentStereoDrawMode
+        {
+            get { return stereoDrawMode; }
+        }
+
         private void Awake()
         {
             targetCamera = GetComponent<Camera>();
@@ -133,19 +160,15 @@ namespace VRGloveDataCapture.MixedReality
 
             backgroundMaterial = new Material(shader)
             {
-                hideFlags = HideFlags.HideAndDontSave
+                hideFlags = HideFlags.HideAndDontSave,
+                enableInstancing = true
             };
             fullscreenMesh = BuildFullscreenMesh();
             backgroundCommands = new CommandBuffer
             {
                 name = CommandBufferName
             };
-            backgroundCommands.DrawMesh(
-                fullscreenMesh,
-                Matrix4x4.identity,
-                backgroundMaterial,
-                0,
-                0);
+            ConfigureBackgroundCommands();
         }
 
         private void OnEnable()
@@ -184,6 +207,11 @@ namespace VRGloveDataCapture.MixedReality
                 TogglePassthrough();
             }
 
+            if (orientationToggle != KeyCode.None && Input.GetKeyDown(orientationToggle))
+            {
+                TogglePerEyeOrientation();
+            }
+
             if (!requested || backgroundMaterial == null)
             {
                 return;
@@ -216,6 +244,9 @@ namespace VRGloveDataCapture.MixedReality
             backgroundMaterial.SetFloat(OpacityId, opacity);
             backgroundMaterial.SetFloat(CameraFrameLayoutId, (float)detectedLayout);
             backgroundMaterial.SetFloat(SwapStereoEyesId, swapStereoEyes ? 1.0f : 0.0f);
+            backgroundMaterial.SetFloat(
+                RotateEachEye180Id,
+                perEyeOrientation == PerEyeOrientation.Rotate180 ? 1.0f : 0.0f);
             UpdateTextureBounds();
             ApplyCameraOverride();
             InstallBackgroundCommands();
@@ -227,7 +258,11 @@ namespace VRGloveDataCapture.MixedReality
                 lastFrameTime = Time.unscaledTime;
                 SetState(PassthroughState.Streaming,
                     "LIVE: " + detectedCameraCount + " camera(s), " + detectedLayout +
-                    ", texture " + texture.width + "x" + texture.height + ".");
+                    ", texture " + texture.width + "x" + texture.height +
+                    ", per-eye " + perEyeOrientation +
+                    ", UV " + FormatUvTransform(currentUvTransform) +
+                    ", XR draw " + stereoDrawMode +
+                    ", " + SystemInfo.graphicsDeviceType + ".");
             }
             else if (Time.unscaledTime - lastFrameTime > stalledFrameSeconds)
             {
@@ -239,6 +274,18 @@ namespace VRGloveDataCapture.MixedReality
         public void TogglePassthrough()
         {
             SetPassthroughEnabled(!requested);
+        }
+
+        public void TogglePerEyeOrientation()
+        {
+            perEyeOrientation = perEyeOrientation == PerEyeOrientation.Normal
+                ? PerEyeOrientation.Rotate180
+                : PerEyeOrientation.Normal;
+            Debug.Log(
+                "[VRGloveDataCapture] Passthrough per-eye orientation: " +
+                perEyeOrientation + ". This rotates each eye inside its own camera region " +
+                "without exchanging the stereo cameras.",
+                this);
         }
 
         /// <summary>
@@ -290,7 +337,7 @@ namespace VRGloveDataCapture.MixedReality
             lastFrameId = 0;
             lastFrameTime = Time.unscaledTime;
             detectedCameraCount = 1;
-            detectedLayout = TrackedCameraLayout.Mono;
+            detectedLayout = StereoFrameLayout.Mono;
             frameLayoutDetected = false;
             SetState(PassthroughState.WaitingForFrame,
                 "Tracked-camera service acquired; waiting for stereo video.");
@@ -328,28 +375,28 @@ namespace VRGloveDataCapture.MixedReality
             bool stereo = cameraCount > 1 || (layoutFlags & OpenVrStereoFlag) != 0;
             if (stereo && (layoutFlags & OpenVrVerticalFlag) != 0)
             {
-                detectedLayout = TrackedCameraLayout.VerticalStereo;
+                detectedLayout = StereoFrameLayout.VerticalStereo;
             }
             else if (stereo && (layoutFlags & OpenVrHorizontalFlag) != 0)
             {
-                detectedLayout = TrackedCameraLayout.HorizontalStereo;
+                detectedLayout = StereoFrameLayout.HorizontalStereo;
             }
             else if (stereo && texture != null)
             {
                 detectedLayout = texture.height > texture.width
-                    ? TrackedCameraLayout.VerticalStereo
-                    : TrackedCameraLayout.HorizontalStereo;
+                    ? StereoFrameLayout.VerticalStereo
+                    : StereoFrameLayout.HorizontalStereo;
             }
             else if (texture != null && texture.height > texture.width * 1.2f)
             {
                 // Some older OpenVR drivers omit the layout property but still
                 // expose the documented top/bottom stereo texture.
-                detectedLayout = TrackedCameraLayout.VerticalStereo;
+                detectedLayout = StereoFrameLayout.VerticalStereo;
                 stereo = true;
             }
             else
             {
-                detectedLayout = TrackedCameraLayout.Mono;
+                detectedLayout = StereoFrameLayout.Mono;
             }
 
             detectedCameraCount = cameraCount > 0 ? cameraCount : (stereo ? 2 : 1);
@@ -417,6 +464,98 @@ namespace VRGloveDataCapture.MixedReality
             }
 
             backgroundMaterial.SetVector(CameraUvTransformId, uvTransform);
+            currentUvTransform = uvTransform;
+        }
+
+        /// <summary>
+        /// CPU reference for the shader's stereo-region mapping. OpenVR vertical
+        /// frames are top/bottom = left/right; a negative frame-bounds scale
+        /// reverses the packed-region index after Unity's texture flip.
+        /// </summary>
+        public static Vector2 CalculateStereoLayoutUv(
+            Vector2 localUv,
+            int renderEyeIndex,
+            StereoFrameLayout layout,
+            bool swapEyes,
+            PerEyeOrientation orientation,
+            Vector2 baseUvScale)
+        {
+            float cameraEye = renderEyeIndex > 0 ? 1.0f : 0.0f;
+            if (swapEyes)
+            {
+                cameraEye = 1.0f - cameraEye;
+            }
+
+            Vector2 orientedUv = orientation == PerEyeOrientation.Rotate180
+                ? Vector2.one - localUv
+                : localUv;
+            if (layout == StereoFrameLayout.VerticalStereo)
+            {
+                float region = baseUvScale.y < 0.0f ? 1.0f - cameraEye : cameraEye;
+                orientedUv.y = orientedUv.y * 0.5f + region * 0.5f;
+            }
+            else if (layout == StereoFrameLayout.HorizontalStereo)
+            {
+                float region = baseUvScale.x < 0.0f ? 1.0f - cameraEye : cameraEye;
+                orientedUv.x = orientedUv.x * 0.5f + region * 0.5f;
+            }
+
+            return orientedUv;
+        }
+
+        private static string FormatUvTransform(Vector4 transform)
+        {
+            return "(" + transform.x.ToString("F4") + "," +
+                   transform.y.ToString("F4") + "," +
+                   transform.z.ToString("F4") + "," +
+                   transform.w.ToString("F4") + ")";
+        }
+
+        /// <summary>
+        /// Unity 2019's CommandBuffer.DrawMesh defaults to one instance and one
+        /// texture-array slice. Single Pass Instanced therefore needs both the
+        /// complete CameraTarget array and two draw instances explicitly.
+        /// </summary>
+        private void ConfigureBackgroundCommands()
+        {
+            if (backgroundCommands == null || fullscreenMesh == null || backgroundMaterial == null)
+            {
+                return;
+            }
+
+            backgroundCommands.Clear();
+            XRSettings.StereoRenderingMode mode = XRSettings.stereoRenderingMode;
+            singlePassInstancedBackground = RequiresInstancedStereoDraw(mode);
+            stereoDrawMode = mode.ToString() +
+                (singlePassInstancedBackground ? " x2/all-slices" : " x1");
+
+            if (singlePassInstancedBackground)
+            {
+                backgroundCommands.SetRenderTarget(
+                    BuiltinRenderTextureType.CameraTarget,
+                    0,
+                    CubemapFace.Unknown,
+                    -1);
+                backgroundCommands.SetInstanceMultiplier(2);
+            }
+
+            backgroundCommands.DrawMesh(
+                fullscreenMesh,
+                Matrix4x4.identity,
+                backgroundMaterial,
+                0,
+                0);
+
+            if (singlePassInstancedBackground)
+            {
+                // Do not leak the stereo multiplier into commands appended later.
+                backgroundCommands.SetInstanceMultiplier(1);
+            }
+        }
+
+        public static bool RequiresInstancedStereoDraw(XRSettings.StereoRenderingMode mode)
+        {
+            return mode == XRSettings.StereoRenderingMode.SinglePassInstanced;
         }
 
         private void ApplyCameraOverride()

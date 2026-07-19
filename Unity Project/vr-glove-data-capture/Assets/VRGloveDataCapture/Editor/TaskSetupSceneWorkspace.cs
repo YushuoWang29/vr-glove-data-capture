@@ -1,4 +1,6 @@
+using System.Collections.Generic;
 using System.IO;
+using System.Reflection;
 using UnityEditor;
 using UnityEditor.SceneManagement;
 using UnityEditor.ShortcutManagement;
@@ -20,11 +22,24 @@ namespace VRGloveDataCapture.Editor
 
         private const string MaterialDirectory = "Assets/VRGloveDataCapture/Materials/TaskSetups";
         private static bool isManagingScenes;
+        private static readonly Dictionary<int, VendorPreviewState> VendorPreviewStates =
+            new Dictionary<int, VendorPreviewState>();
+        private static readonly HashSet<string> PendingPreviewReapplyPaths =
+            new HashSet<string>();
+        private static readonly MethodInfo ClearSceneDirtinessMethod =
+            typeof(EditorSceneManager).GetMethod(
+                "ClearSceneDirtiness",
+                BindingFlags.Static | BindingFlags.NonPublic);
 
         static TaskSetupSceneWorkspace()
         {
             EditorSceneManager.sceneOpened += OnSceneOpened;
+            EditorSceneManager.sceneSaving += OnSceneSaving;
+            EditorSceneManager.sceneSaved += OnSceneSaved;
+            EditorSceneManager.sceneClosing += OnSceneClosing;
             EditorApplication.playModeStateChanged += OnPlayModeStateChanged;
+            AssemblyReloadEvents.beforeAssemblyReload += RestoreAllVendorPreviews;
+            EditorApplication.quitting += RestoreAllVendorPreviews;
             EditorApplication.delayCall += EnsurePickPlaceSceneExists;
             EditorApplication.delayCall += EnsureBaseScenesForOpenTaskSetups;
         }
@@ -127,9 +142,54 @@ namespace VRGloveDataCapture.Editor
 
         private static void OnPlayModeStateChanged(PlayModeStateChange state)
         {
-            if (state == PlayModeStateChange.EnteredEditMode)
+            if (state == PlayModeStateChange.ExitingEditMode)
+            {
+                // Play Mode receives a clean clone of the untouched vendor scene;
+                // VendorDemoLayoutOffset reapplies the same rules at runtime.
+                RestoreAllVendorPreviews();
+            }
+            else if (state == PlayModeStateChange.EnteredEditMode)
             {
                 EditorApplication.delayCall += EnsureBaseScenesForOpenTaskSetups;
+            }
+        }
+
+        private static void OnSceneSaving(Scene scene, string path)
+        {
+            if (HasVendorPreview(scene))
+            {
+                // Never serialize the task-workspace preview into the vendor SDK.
+                if (!string.IsNullOrEmpty(path))
+                {
+                    PendingPreviewReapplyPaths.Add(path);
+                }
+
+                RestoreVendorPreview(scene);
+            }
+        }
+
+        private static void OnSceneSaved(Scene scene)
+        {
+            if (PendingPreviewReapplyPaths.Remove(scene.path))
+            {
+                EditorApplication.delayCall += EnsureBaseScenesForOpenTaskSetups;
+            }
+        }
+
+        private static void OnSceneClosing(Scene scene, bool removingScene)
+        {
+            TaskSetupSceneMarker marker = FindMarker(scene);
+            if (marker != null)
+            {
+                Scene baseScene = SceneManager.GetSceneByPath(marker.BaseScenePath);
+                RestoreVendorPreview(baseScene);
+                // If another task setup shares the same base scene, restore its
+                // preview after this scene has actually left the workspace.
+                EditorApplication.delayCall += EnsureBaseScenesForOpenTaskSetups;
+            }
+            else if (HasVendorPreview(scene))
+            {
+                RestoreVendorPreview(scene);
             }
         }
 
@@ -250,11 +310,165 @@ namespace VRGloveDataCapture.Editor
                 }
 
                 SceneManager.SetActiveScene(taskScene);
+                ApplyVendorLayoutPreview(taskScene, baseScene);
             }
             finally
             {
                 isManagingScenes = false;
             }
+        }
+
+        private static void ApplyVendorLayoutPreview(Scene taskScene, Scene baseScene)
+        {
+            if (EditorApplication.isPlayingOrWillChangePlaymode ||
+                !taskScene.IsValid() || !taskScene.isLoaded ||
+                !baseScene.IsValid() || !baseScene.isLoaded)
+            {
+                return;
+            }
+
+            VendorDemoLayoutOffset adapter = null;
+            GameObject[] taskRoots = taskScene.GetRootGameObjects();
+            for (int rootIndex = 0; rootIndex < taskRoots.Length && adapter == null; rootIndex++)
+            {
+                adapter = taskRoots[rootIndex].GetComponentInChildren<VendorDemoLayoutOffset>(true);
+            }
+
+            if (adapter == null)
+            {
+                return;
+            }
+
+            bool wasDirty = baseScene.isDirty;
+            bool changed = false;
+            GameObject[] baseRoots = baseScene.GetRootGameObjects();
+            for (int rootIndex = 0; rootIndex < baseRoots.Length; rootIndex++)
+            {
+                Transform[] transforms = baseRoots[rootIndex].GetComponentsInChildren<Transform>(true);
+                for (int transformIndex = 0; transformIndex < transforms.Length; transformIndex++)
+                {
+                    Transform target = transforms[transformIndex];
+                    float targetWorldX;
+                    if (target == null ||
+                        !VendorDemoLayoutOffset.TryGetTargetWorldX(target.name, out targetWorldX))
+                    {
+                        continue;
+                    }
+
+                    int instanceId = target.GetInstanceID();
+                    if (!VendorPreviewStates.ContainsKey(instanceId))
+                    {
+                        VendorPreviewStates.Add(instanceId, new VendorPreviewState
+                        {
+                            Target = target,
+                            OriginalWorldPosition = target.position,
+                            Scene = baseScene
+                        });
+                    }
+
+                    if (!Mathf.Approximately(target.position.x, targetWorldX))
+                    {
+                        Vector3 position = target.position;
+                        position.x = targetWorldX;
+                        target.position = position;
+                        changed = true;
+                    }
+                }
+            }
+
+            if (changed)
+            {
+                if (!wasDirty)
+                {
+                    ClearSceneDirtiness(baseScene);
+                }
+
+                SceneView.RepaintAll();
+            }
+        }
+
+        private static void RestoreAllVendorPreviews()
+        {
+            HashSet<Scene> scenes = new HashSet<Scene>();
+            foreach (KeyValuePair<int, VendorPreviewState> entry in VendorPreviewStates)
+            {
+                if (entry.Value != null && entry.Value.Scene.IsValid())
+                {
+                    scenes.Add(entry.Value.Scene);
+                }
+            }
+
+            foreach (Scene scene in scenes)
+            {
+                RestoreVendorPreview(scene);
+            }
+        }
+
+        private static void RestoreVendorPreview(Scene baseScene)
+        {
+            if (!baseScene.IsValid())
+            {
+                return;
+            }
+
+            bool wasDirty = baseScene.isDirty;
+            List<int> restoredIds = new List<int>();
+            foreach (KeyValuePair<int, VendorPreviewState> entry in VendorPreviewStates)
+            {
+                VendorPreviewState state = entry.Value;
+                if (state == null || state.Scene != baseScene)
+                {
+                    continue;
+                }
+
+                if (state.Target != null)
+                {
+                    state.Target.position = state.OriginalWorldPosition;
+                }
+
+                restoredIds.Add(entry.Key);
+            }
+
+            for (int index = 0; index < restoredIds.Count; index++)
+            {
+                VendorPreviewStates.Remove(restoredIds[index]);
+            }
+
+            if (!wasDirty && baseScene.isLoaded)
+            {
+                ClearSceneDirtiness(baseScene);
+            }
+        }
+
+        private static bool HasVendorPreview(Scene scene)
+        {
+            if (!scene.IsValid())
+            {
+                return false;
+            }
+
+            foreach (KeyValuePair<int, VendorPreviewState> entry in VendorPreviewStates)
+            {
+                if (entry.Value != null && entry.Value.Scene == scene)
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        private static void ClearSceneDirtiness(Scene scene)
+        {
+            if (ClearSceneDirtinessMethod == null || !scene.IsValid())
+            {
+                return;
+            }
+
+            // Unity 2019.4 exposes this native binding as internal. The project is
+            // fixed to that editor version; reflection keeps the workspace preview
+            // non-dirty while sceneSaving still restores positions as a hard guard.
+            ClearSceneDirtinessMethod.Invoke(null, new object[] { scene });
         }
 
         private static TaskSetupSceneMarker FindMarker(Scene scene)
@@ -307,6 +521,7 @@ namespace VRGloveDataCapture.Editor
             return new TaskMaterials
             {
                 structure = EnsureMaterial("TaskStructure", new Color(0.12f, 0.17f, 0.22f, 1f), 0.15f, 0.35f),
+                table = EnsureMaterial("TaskTable", new Color(0.34f, 0.23f, 0.15f, 1f), 0.02f, 0.28f),
                 yellow = EnsureMaterial("TargetYellow", new Color(0.95f, 0.68f, 0.12f, 1f), 0f, 0.25f),
                 orange = EnsureMaterial("TargetOrange", new Color(0.95f, 0.36f, 0.1f, 1f), 0.05f, 0.32f),
                 green = EnsureMaterial("TargetGreen", new Color(0.25f, 0.72f, 0.36f, 1f), 0f, 0.22f),
@@ -342,7 +557,11 @@ namespace VRGloveDataCapture.Editor
                 string objectName = renderer.gameObject.name;
                 Material material = null;
 
-                if (objectName.StartsWith("Bucket_Wall_") || objectName.StartsWith("Bin_Wall_"))
+                if (objectName.StartsWith("Task_Worktable_"))
+                {
+                    material = materials.table;
+                }
+                else if (objectName.StartsWith("Bucket_Wall_") || objectName.StartsWith("Bin_Wall_"))
                 {
                     material = materials.structure;
                 }
@@ -383,11 +602,19 @@ namespace VRGloveDataCapture.Editor
         private sealed class TaskMaterials
         {
             internal Material structure;
+            internal Material table;
             internal Material yellow;
             internal Material orange;
             internal Material green;
             internal Material red;
             internal Material blue;
+        }
+
+        private sealed class VendorPreviewState
+        {
+            internal Transform Target;
+            internal Vector3 OriginalWorldPosition;
+            internal Scene Scene;
         }
     }
 }

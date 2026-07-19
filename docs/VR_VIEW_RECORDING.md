@@ -16,6 +16,14 @@
 | 音频 | Unity 场景音频 | 不自动采集 Windows 麦克风 |
 | 输出目录 | `Unity Project/vr-glove-data-capture/Recordings/` | 已被 Git 忽略，不会误提交实验视频 |
 
+在当前电脑上的独立录像绝对目录为：
+
+```text
+F:\Research\SGLab\cable_driven\HTC VIVE & Hi5 2\Unity Project\vr-glove-data-capture\Recordings\
+```
+
+文件名格式为 `vr_view_YYYYMMDD_HHMMSS.mp4`；例如已有日志记录的 `vr_view_20260719_203159.mp4`。统一 trial 录像不写入该目录，而是保存在对应 trial 的 `video/vr_view.mp4`。
+
 ## 两种录制模式
 
 | 模式 | 启停入口 | 视频位置 | 时间标签 |

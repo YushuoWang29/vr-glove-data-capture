@@ -75,6 +75,47 @@ namespace VRGloveDataCapture.Tests
             Assert.IsNull(FindChildByName(layoutRoot.transform, "Pick_Source_Pad"),
                 "Legacy blue source pads must not remain under graspable objects.");
 
+            Transform worktableSurfaceTransform =
+                FindChildByName(layoutRoot.transform, "Task_Worktable_Surface");
+            Assert.IsNotNull(worktableSurfaceTransform,
+                "The editable task setup has no supporting worktable.");
+            BoxCollider worktableCollider = worktableSurfaceTransform.GetComponent<BoxCollider>();
+            Assert.IsNotNull(worktableCollider, "The task worktable has no physical collider.");
+            Assert.IsFalse(worktableCollider.isTrigger,
+                "The task worktable must use a solid collider.");
+            Assert.IsNull(worktableSurfaceTransform.GetComponent<Rigidbody>(),
+                "The task worktable must remain static.");
+            Assert.AreEqual(12, worktableSurfaceTransform.gameObject.layer,
+                "The task worktable is not on the Hi5 plane layer.");
+            float worktableTop = worktableCollider.bounds.max.y;
+            Assert.That(worktableTop, Is.EqualTo(0.69f).Within(0.002f),
+                "The worktable top does not match the authored task surface height.");
+
+            VendorDemoLayoutOffset vendorOffset =
+                layoutRoot.GetComponent<VendorDemoLayoutOffset>();
+            Assert.IsNotNull(vendorOffset,
+                "The task setup has no vendor demonstration-area layout adapter.");
+            for (int frame = 0;
+                 frame < 120 && vendorOffset.AppliedEntryCount < vendorOffset.ExpectedEntryCount;
+                 frame++)
+            {
+                yield return null;
+            }
+            Assert.AreEqual(vendorOffset.ExpectedEntryCount, vendorOffset.AppliedEntryCount,
+                "One or more vendor tables/objects were not moved away from the center workspace.");
+            Assert.That(
+                FindSceneTransform(VendorScenePath, "Interaction_Simple_Object_3").position.x,
+                Is.EqualTo(-1.420f).Within(0.002f),
+                "The left vendor demonstration group was not moved aside.");
+            Assert.That(
+                FindSceneTransform(VendorScenePath, "Interaction_Compound_Object_10").position.x,
+                Is.EqualTo(2.059f).Within(0.002f),
+                "The right vendor demonstration group was not moved aside.");
+            Assert.That(
+                FindSceneTransform(VendorScenePath, "Interaction_Simple_Object_2").position.x,
+                Is.EqualTo(1.770f).Within(0.002f),
+                "A vendor simple object still occupies the task worktable.");
+
             Dictionary<PickPlaceTaskObject, Vector3> startPositions =
                 new Dictionary<PickPlaceTaskObject, Vector3>();
             FieldInfo capturedStartPositionField = typeof(PickPlaceTaskObject).GetField(
@@ -104,6 +145,22 @@ namespace VRGloveDataCapture.Tests
                     taskObject.name + " renderer is detached from its physics/grab root.");
                 Assert.AreEqual(1, taskObject.GetComponentsInChildren<Renderer>(true).Length,
                     taskObject.name + " has a duplicate or residual visual renderer.");
+                Assert.GreaterOrEqual(
+                    physicalCollider.bounds.min.y,
+                    worktableTop - 0.01f,
+                    taskObject.name + " starts below the worktable surface.");
+                Assert.LessOrEqual(
+                    physicalCollider.bounds.min.y,
+                    worktableTop + 0.025f,
+                    taskObject.name + " floats too far above the worktable surface.");
+                Assert.GreaterOrEqual(physicalCollider.bounds.min.x, worktableCollider.bounds.min.x,
+                    taskObject.name + " starts beyond the left edge of the worktable.");
+                Assert.LessOrEqual(physicalCollider.bounds.max.x, worktableCollider.bounds.max.x,
+                    taskObject.name + " starts beyond the right edge of the worktable.");
+                Assert.GreaterOrEqual(physicalCollider.bounds.min.z, worktableCollider.bounds.min.z,
+                    taskObject.name + " starts beyond the front edge of the worktable.");
+                Assert.LessOrEqual(physicalCollider.bounds.max.z, worktableCollider.bounds.max.z,
+                    taskObject.name + " starts beyond the back edge of the worktable.");
             }
 
             PickPlaceTaskObject mug = Array.Find(taskObjects, item => item.name == "YCB_Mug");
@@ -205,6 +262,16 @@ namespace VRGloveDataCapture.Tests
                     0.001f,
                     entry.Key.name + " did not restore its ready color.");
             }
+
+            yield return null;
+            Assert.That(
+                FindSceneTransform(VendorScenePath, "Interaction_Simple_Object_3").position.x,
+                Is.EqualTo(-1.420f).Within(0.002f),
+                "Reset returned the left vendor demonstration group to the center.");
+            Assert.That(
+                FindSceneTransform(VendorScenePath, "Interaction_Compound_Object_10").position.x,
+                Is.EqualTo(2.059f).Within(0.002f),
+                "Reset returned the right vendor demonstration group to the center.");
         }
 
         private static Transform FindChildByName(Transform root, string objectName)
@@ -238,6 +305,24 @@ namespace VRGloveDataCapture.Tests
             object messageBus = getInstance.Invoke(null, null);
             dispatch.Invoke(messageBus, new object[] { "messageObjectReset", null, null, null, null });
             return true;
+        }
+
+        private static Transform FindSceneTransform(string scenePath, string objectName)
+        {
+            Transform[] transforms = Resources.FindObjectsOfTypeAll<Transform>();
+            for (int index = 0; index < transforms.Length; index++)
+            {
+                Transform candidate = transforms[index];
+                if (candidate != null && candidate.name == objectName &&
+                    candidate.gameObject.scene.IsValid() &&
+                    candidate.gameObject.scene.path == scenePath)
+                {
+                    return candidate;
+                }
+            }
+
+            Assert.Fail("Scene object was not found: " + scenePath + " / " + objectName);
+            return null;
         }
 
         private static Type FindType(string fullName)

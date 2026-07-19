@@ -24,6 +24,12 @@ namespace VRGloveDataCapture.UserInterface
             public Material Material;
         }
 
+        private sealed class OriginalMainChildState
+        {
+            public GameObject Target;
+            public bool ActiveWithoutFeaturePanel;
+        }
+
         private const string InstallerName = "[VR Glove Gaze Control Panel]";
         private const string PanelName = "VRGlove_FunctionControlPanel";
         private static GazeFunctionPanelController instance;
@@ -37,7 +43,8 @@ namespace VRGloveDataCapture.UserInterface
         private static readonly Color WarningColor = new Color(0.99f, 0.92f, 0.76f, 1.0f);
         private static readonly Color UnavailableColor = new Color(0.88f, 0.89f, 0.90f, 1.0f);
 
-        private readonly List<GameObject> originalMainChildren = new List<GameObject>();
+        private readonly List<OriginalMainChildState> originalMainChildren =
+            new List<OriginalMainChildState>();
         private readonly List<ButtonView> buttons = new List<ButtonView>();
         private readonly List<Material> ownedMaterials = new List<Material>();
         private readonly List<Mesh> ownedMeshes = new List<Mesh>();
@@ -147,9 +154,15 @@ namespace VRGloveDataCapture.UserInterface
                 return;
             }
 
+            PrepareVendorInteractionEntry();
             for (int index = 0; index < mainStateRoot.childCount; index++)
             {
-                originalMainChildren.Add(mainStateRoot.GetChild(index).gameObject);
+                GameObject child = mainStateRoot.GetChild(index).gameObject;
+                originalMainChildren.Add(new OriginalMainChildState
+                {
+                    Target = child,
+                    ActiveWithoutFeaturePanel = child.activeSelf
+                });
             }
 
             BuildPanel();
@@ -428,9 +441,11 @@ namespace VRGloveDataCapture.UserInterface
         {
             for (int index = 0; index < originalMainChildren.Count; index++)
             {
-                if (originalMainChildren[index] != null)
+                OriginalMainChildState childState = originalMainChildren[index];
+                if (childState != null && childState.Target != null)
                 {
-                    originalMainChildren[index].SetActive(!visible);
+                    childState.Target.SetActive(
+                        visible ? false : childState.ActiveWithoutFeaturePanel);
                 }
             }
 
@@ -438,6 +453,104 @@ namespace VRGloveDataCapture.UserInterface
             {
                 panelRoot.SetActive(visible);
             }
+        }
+
+        private void PrepareVendorInteractionEntry()
+        {
+            Transform reconnect = mainStateRoot.Find("Btn_Reconnect");
+            Transform interaction = mainStateRoot.Find("Btn_Help");
+            Transform close = mainStateRoot.Find("Btn_Close");
+            if (reconnect == null || interaction == null || close == null)
+            {
+                Debug.LogWarning(
+                    "[GazeControlPanel] Vendor main-menu buttons were not found; " +
+                    "the Interaction layout adapter was skipped.",
+                    this);
+                return;
+            }
+
+            // The vendor scene contains an inactive legacy button whose sprite says
+            // Interaction, but it occupies the Reconnect slot and also enters the
+            // ReConnect state. Reuse the vendor Close slot and Exit action so the
+            // three entries become Calibrate / Reconnect / Interaction.
+            interaction.localPosition = close.localPosition;
+            interaction.localRotation = close.localRotation;
+            interaction.localScale = close.localScale;
+
+            if (!CopyEnumField(close.gameObject, interaction.gameObject, "EnterState"))
+            {
+                Debug.LogWarning(
+                    "[GazeControlPanel] Could not copy the vendor Exit action to Interaction.",
+                    this);
+            }
+
+            interaction.gameObject.SetActive(true);
+            close.gameObject.SetActive(false);
+
+            Collider reconnectCollider = reconnect.GetComponent<Collider>();
+            Collider interactionCollider = interaction.GetComponent<Collider>();
+            if (reconnectCollider != null && interactionCollider != null &&
+                reconnectCollider.enabled && interactionCollider.enabled &&
+                reconnect.gameObject.activeInHierarchy && interaction.gameObject.activeInHierarchy)
+            {
+                Physics.SyncTransforms();
+                if (reconnectCollider.bounds.Intersects(interactionCollider.bounds))
+                {
+                    Debug.LogError(
+                        "[GazeControlPanel] Reconnect and Interaction colliders still overlap.",
+                        this);
+                }
+            }
+        }
+
+        private static bool CopyEnumField(
+            GameObject source,
+            GameObject destination,
+            string fieldName)
+        {
+            MonoBehaviour[] sourceBehaviours = source.GetComponents<MonoBehaviour>();
+            MonoBehaviour[] destinationBehaviours = destination.GetComponents<MonoBehaviour>();
+            for (int sourceIndex = 0; sourceIndex < sourceBehaviours.Length; sourceIndex++)
+            {
+                MonoBehaviour sourceBehaviour = sourceBehaviours[sourceIndex];
+                if (sourceBehaviour == null)
+                {
+                    continue;
+                }
+
+                FieldInfo sourceField = sourceBehaviour.GetType().GetField(
+                    fieldName,
+                    BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+                if (sourceField == null || !sourceField.FieldType.IsEnum)
+                {
+                    continue;
+                }
+
+                object sourceValue = sourceField.GetValue(sourceBehaviour);
+                for (int destinationIndex = 0;
+                     destinationIndex < destinationBehaviours.Length;
+                     destinationIndex++)
+                {
+                    MonoBehaviour destinationBehaviour = destinationBehaviours[destinationIndex];
+                    if (destinationBehaviour == null)
+                    {
+                        continue;
+                    }
+
+                    FieldInfo destinationField = destinationBehaviour.GetType().GetField(
+                        fieldName,
+                        BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+                    if (destinationField == null || destinationField.FieldType != sourceField.FieldType)
+                    {
+                        continue;
+                    }
+
+                    destinationField.SetValue(destinationBehaviour, sourceValue);
+                    return true;
+                }
+            }
+
+            return false;
         }
 
         private void RefreshStatus()

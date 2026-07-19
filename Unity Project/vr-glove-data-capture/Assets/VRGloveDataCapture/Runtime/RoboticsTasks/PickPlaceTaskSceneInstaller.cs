@@ -24,6 +24,7 @@ namespace VRGloveDataCapture.RoboticsTasks
         private static readonly Color OrangeColor = new Color(0.95f, 0.36f, 0.1f, 1f);
         private static readonly Color RedColor = new Color(0.78f, 0.08f, 0.08f, 1f);
         private static readonly Color BlueColor = new Color(0.06f, 0.28f, 0.85f, 1f);
+        private static readonly Color TableColor = new Color(0.34f, 0.23f, 0.15f, 1f);
 
         public static GameObject Build(Scene scene, bool bindToHi5Immediately = true)
         {
@@ -35,7 +36,10 @@ namespace VRGloveDataCapture.RoboticsTasks
             SceneManager.MoveGameObjectToScene(root, scene);
 
             PickPlaceTaskSceneController controller = root.AddComponent<PickPlaceTaskSceneController>();
+            root.AddComponent<VendorDemoLayoutOffset>();
             Material structureMaterial = CreateMaterial("Task structure", SlateColor, 0.15f, 0.35f);
+            Material tableMaterial = CreateMaterial("Task worktable", TableColor, 0.02f, 0.28f);
+            CreateWorktable(root.transform, anchor.x, origin.z + 0.02f, surfaceY, tableMaterial);
 
             int createdTaskCount = 0;
 
@@ -284,10 +288,15 @@ namespace VRGloveDataCapture.RoboticsTasks
                 physicalCollider = box;
             }
 
-            root.transform.position = new Vector3(
-                horizontalStart.x,
-                surfaceY + physicalCollider.bounds.extents.y + 0.012f,
-                horizontalStart.z);
+            // Collider.bounds is empty while an object is inactive. Activate it
+            // before measuring, and align the actual world-space collider bottom
+            // rather than assuming a centered, unrotated mesh.
+            root.transform.position = new Vector3(horizontalStart.x, surfaceY, horizontalStart.z);
+            root.SetActive(true);
+            Physics.SyncTransforms();
+            root.transform.position += Vector3.up *
+                ((surfaceY + 0.012f) - physicalCollider.bounds.min.y);
+            Physics.SyncTransforms();
 
             ConfigureRigidbody(root, mass);
             PickPlaceTaskObject taskObject = root.AddComponent<PickPlaceTaskObject>();
@@ -299,13 +308,61 @@ namespace VRGloveDataCapture.RoboticsTasks
                 return null;
             }
 
-            root.SetActive(true);
             if (bindToHi5Immediately)
             {
                 controller.RegisterObject(taskObject);
             }
 
             return taskObject;
+        }
+
+        private static void CreateWorktable(
+            Transform parent,
+            float centerX,
+            float centerZ,
+            float surfaceY,
+            Material material)
+        {
+            GameObject tableRoot = new GameObject("Task_Worktable");
+            tableRoot.transform.SetParent(parent, false);
+
+            const float topWidth = 1.80f;
+            const float topDepth = 0.72f;
+            const float topThickness = 0.08f;
+            CreatePrimitivePart(
+                tableRoot.transform,
+                "Task_Worktable_Surface",
+                PrimitiveType.Cube,
+                new Vector3(centerX, surfaceY - topThickness * 0.5f, centerZ),
+                new Vector3(topWidth, topThickness, topDepth),
+                Quaternion.identity,
+                material,
+                Hi5PlaneLayer);
+
+            const float legWidth = 0.07f;
+            const float legHeight = 0.61f;
+            float legY = (surfaceY - topThickness) - legHeight * 0.5f;
+            float legOffsetX = topWidth * 0.5f - 0.12f;
+            float legOffsetZ = topDepth * 0.5f - 0.09f;
+            int legIndex = 0;
+            for (int xSign = -1; xSign <= 1; xSign += 2)
+            {
+                for (int zSign = -1; zSign <= 1; zSign += 2)
+                {
+                    CreatePrimitivePart(
+                        tableRoot.transform,
+                        "Task_Worktable_Leg_" + legIndex++,
+                        PrimitiveType.Cube,
+                        new Vector3(
+                            centerX + xSign * legOffsetX,
+                            legY,
+                            centerZ + zSign * legOffsetZ),
+                        new Vector3(legWidth, legHeight, legWidth),
+                        Quaternion.identity,
+                        material,
+                        Hi5PlaneLayer);
+                }
+            }
         }
 
         private static PickPlaceTaskObject CreateBlock(

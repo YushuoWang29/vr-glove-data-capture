@@ -40,6 +40,7 @@ Shader "Hidden/VRGloveDataCapture/PassthroughBackground"
             float4 _CameraUvTransform;
             float _CameraFrameLayout;
             float _SwapStereoEyes;
+            float _RotateEachEye180;
             float _Opacity;
 
             v2f vert(appdata input)
@@ -61,21 +62,37 @@ Shader "Hidden/VRGloveDataCapture/PassthroughBackground"
             {
                 UNITY_SETUP_STEREO_EYE_INDEX_POST_VERTEX(input);
 
-                float eyeIndex = (float)unity_StereoEyeIndex;
-                eyeIndex = lerp(eyeIndex, 1.0 - eyeIndex, step(0.5, _SwapStereoEyes));
+                float cameraEye = (float)unity_StereoEyeIndex;
+                cameraEye = lerp(
+                    cameraEye,
+                    1.0 - cameraEye,
+                    step(0.5, _SwapStereoEyes));
 
-                float2 layoutUv = input.uv;
+                // Orientation is deliberately corrected inside each eye image.
+                // Rotating the combined stereo texture would exchange cameras.
+                float2 layoutUv = lerp(
+                    input.uv,
+                    1.0 - input.uv,
+                    step(0.5, _RotateEachEye180));
                 if (_CameraFrameLayout > 0.5 && _CameraFrameLayout < 1.5)
                 {
-                    // OpenVR VerticalLayout is top/bottom = left/right. The base
-                    // UV transform performs the API-to-Unity vertical flip after
-                    // this split, preserving that documented eye order.
-                    layoutUv.y = layoutUv.y * 0.5 + eyeIndex * 0.5;
+                    // OpenVR VerticalLayout is top/bottom = left/right. Valve's
+                    // Unity wrapper normally supplies a negative V scale, so the
+                    // packed region must be reversed to preserve left/right.
+                    float regionEye = lerp(
+                        cameraEye,
+                        1.0 - cameraEye,
+                        step(_CameraUvTransform.y, -0.000001));
+                    layoutUv.y = layoutUv.y * 0.5 + regionEye * 0.5;
                 }
                 else if (_CameraFrameLayout >= 1.5)
                 {
                     // OpenVR HorizontalLayout is left/right.
-                    layoutUv.x = layoutUv.x * 0.5 + eyeIndex * 0.5;
+                    float regionEye = lerp(
+                        cameraEye,
+                        1.0 - cameraEye,
+                        step(_CameraUvTransform.x, -0.000001));
+                    layoutUv.x = layoutUv.x * 0.5 + regionEye * 0.5;
                 }
 
                 float2 cameraUv =
