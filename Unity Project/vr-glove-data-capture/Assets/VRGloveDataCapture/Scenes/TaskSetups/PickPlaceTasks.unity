@@ -411,7 +411,6 @@ GameObject:
   m_Component:
   - component: {fileID: 121015930}
   - component: {fileID: 121015929}
-  - component: {fileID: 121015928}
   m_Layer: 0
   m_Name: VRGlove_PickPlace_Tasks
   m_TagString: Untagged
@@ -419,18 +418,6 @@ GameObject:
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
   m_IsActive: 1
---- !u!114 &121015928
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 121015927}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: b43e851eb7b330d40a796970963323fb, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
 --- !u!114 &121015929
 MonoBehaviour:
   m_ObjectHideFlags: 0

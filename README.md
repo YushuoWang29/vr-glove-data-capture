@@ -19,7 +19,7 @@
 - 提供 **手–物体自适应视觉接触**：自由空间保持手套姿态，接触后把将要穿入刚体的可视指骨截停在物体表面；源骨骼、校准、抓取状态和采集数据保持不变。
 - 使用 VIVE Pro 2 前置双摄像头实现实验性的 **stereo video see-through**：在 Unity 2019 Single Pass Instanced 下显式绘制全部双眼切片，并识别 OpenVR 上下双目布局及 SteamVR 的 UV 翻转，避免右眼漏画或左右相机交叉；可按 `O` 仅在各眼图像内部切换 180° 朝向诊断。
 - 使用 Unity Recorder 在 Editor Play Mode 中录制 **VR 第一视角 MP4**。
-- 提供可在 **Scene View 直接编辑**的机器人操作任务场景，包括带实体碰撞桌面的球入桶、杯放定位垫、罐入箱和颜色分类；运行时把原厂示例家具移到两侧，为中央任务区留出空间。
+- 提供可在 **Scene View 直接编辑**的机器人操作任务场景，包括带实体碰撞桌面的球入桶、杯放定位垫、罐入箱和颜色分类；原厂示例家具也可在本地 `TableScene_Vive` 中直接调整并保存。
 - 将新增任务接入 Hi5 原场景的统一复位消息和实体复位按钮。
 - 提供 **统一实验数据采集**：导出手部骨骼、关节角、物体与头显位姿、Hi5 模块状态和任务事件，并与 trial 视频共享主机单调时间轴。
 - 提供 **session/trial 元数据管理**、操作员控制窗口、原子化文件收尾、SHA-256 校验和及可插拔的原始 IMU provider 接口。
@@ -88,7 +88,7 @@ flowchart LR
 
 1. **不直接修改 Hi5 厂商源码**：外展/内收模式通过运行时反射配置。
 2. **不提交 Hi5 专有资源**：`Assets/NoitomHi5` 与 `Assets/Hi5_Interaction_SDK` 由用户本地导入并被 Git 忽略。
-3. **不修改厂商示例 Scene**：项目任务保存在独立 `.unity` 场景；编辑器自动把原厂 `TableScene_Vive` 作为基础场景叠加加载。
+3. **任务与基础场景分离**：项目任务保存在仓库跟踪的独立 `.unity` 场景；编辑器自动把本地 `TableScene_Vive` 作为基础场景叠加加载。用户可保存基础场景的本机布局，但厂商目录仍被 Git 忽略。
 4. **统一复位消息**：新增任务订阅厂商的 `messageObjectReset`，与原有实体按钮共享同一复位链路。
 5. **资源可追溯**：YCB 子集保留对象 ID、下载归档哈希、文件哈希和 CC BY 4.0 署名信息。
 6. **统一时钟与原子化落盘**：一个采样时刻只读取一次单调时钟，多流共享 `sample_id`/`t_trial_ns`；录制中使用 `.partial`，正常结束后再生成 manifest、校验和与 `COMPLETE`。
@@ -219,7 +219,7 @@ Tools > VR Glove Data Capture > Task Setups > Open Pick Place Task Setup
 
 | Scene | 所有权 | 作用 | 是否直接编辑 |
 |---|---|---|---|
-| `TableScene_Vive` | Hi5 原厂、本地导入 | 校准流程、虚拟手、状态面板、原厂物品、实体复位按钮 | 否 |
+| `TableScene_Vive` | Hi5 原厂、本地导入 | 校准流程、虚拟手、状态面板、原厂物品、实体复位按钮 | 可在本机直接编辑并保存；Git 不跟踪 |
 | `PickPlaceTasks` | 本仓库 | YCB 任务物体、容器、目标区、任务控制器 | 是 |
 
 进入 Play Mode 前先执行：
@@ -355,10 +355,9 @@ PickPlaceTaskSceneSmokeTests.EditableTaskSceneBindsFiveTasksAndHi5ResetRestoresT
 该测试会先加载真实厂商场景，使 Hi5 manager 完成初始化，再以 Additive 模式加载项目任务场景，并验证：
 
 1. 持久化场景包含实体工作桌、5 个可抓物体和 5 个目标区，全部起始物体的 Collider 均位于桌面范围且不穿桌。
-2. 原厂示例桌与相关物体的 12 项编辑态预览/运行时侧移规则全部生效，中央任务区无遮挡；原厂 Scene 保持未标脏，整场复位后仍保持侧移。
-3. 五项匹配放置均能触发成功。
-4. `messageObjectReset` 能恢复全部物体的位置，并恢复启用重力的动态刚体状态。
-5. 刚体线速度与角速度归零，任务进度和目标颜色恢复。
+2. 五项匹配放置均能触发成功。
+3. `messageObjectReset` 能恢复全部任务物体的位置，并恢复启用重力的动态刚体状态。
+4. 刚体线速度与角速度归零，任务进度和目标颜色恢复。
 
 当前开发版本已经在 Unity `2019.4.18f1` 下通过资源验证和上述 Play Mode 测试。
 
@@ -376,7 +375,7 @@ AdaptiveHandContactSmokeTests.SolverAutoInstallsOnBothVisibleHandsWithoutWriting
 GazeControlPanelSmokeTests.PanelPreservesCalibrationAndRoutesVendorGazeToProjectControls
 ```
 
-该测试验证原厂校准对象不被删除、`Reconnect` 与 `Interaction` 分居独立槽位且碰撞体不重叠、六个功能按钮均带有原厂 `VRInteractiveItem` 和 gaze collider、驻留完成可调用透视控制、Single Pass Instanced 采用双实例/全眼切片绘制、VerticalStereo 在负 V 缩放下不交叉双眼，以及重新校准会恢复经过适配的原厂主界面。按 **`Ctrl+Shift+F10`**（Edit Mode）或执行 `Tools > VR Glove Data Capture > Run All Project Play Mode Tests` 可以一次运行注视面板、手–物体接触、pick-and-place 复位和统一采集四项测试；当前结果为 `passed=4, failed=0, skipped=0`。
+该测试验证每次 Play 都能建立有效的运行时面板、原厂校准对象不被删除、`Reconnect` 与 `Interaction` 分居独立槽位且碰撞体不重叠、P-pose 权威完成回调可解锁六个注视控件、原厂手势把菜单切到 `Exit` 后功能面板仍可见、驻留完成可调用透视控制、Single Pass Instanced 采用双实例/全眼切片绘制、VerticalStereo 在负 V 缩放下不交叉双眼，以及重新校准会恢复经过适配的原厂主界面。按 **`Ctrl+Shift+F10`**（Edit Mode）或执行 `Tools > VR Glove Data Capture > Run All Project Play Mode Tests` 可以一次运行注视面板、手–物体接触、pick-and-place 复位和统一采集四项测试。
 
 统一采集的端到端测试为：
 
@@ -419,6 +418,10 @@ UnifiedCaptureSmokeTests.TrialFinalizesAtomicMachineReadableStreamsAndManifest
 ### 打开 `TableScene_Vive` 没看到机器人任务台
 
 这是双场景结构的预期行为。请打开 `Assets/VRGloveDataCapture/Scenes/TaskSetups/PickPlaceTasks.unity`，或按 `Ctrl+Shift+F6`。编辑器会自动叠加加载原厂 `TableScene_Vive`；如果未加载，先运行资源验证菜单检查本地 SDK 是否完整。
+
+### 调整原厂桌子或物体后按 `Ctrl+S` 又回到旧位置
+
+旧版任务工作区曾把原厂布局当作临时预览，并在保存、进入 Play Mode 或脚本重载前强制恢复；运行时还会再次套用固定 X 坐标。该双层保护已移除。现在移动 `TableScene_Vive` 所属对象后，`Ctrl+S` 会把变换直接写入本地原厂 Scene，下一次 Play Mode 和原厂复位组件都以该保存姿态为基准。由于 `Assets/Hi5_Interaction_SDK/` 被 Git 忽略，这些布局变更只存在于当前电脑，不会随 `git push` 同步。
 
 ## 数据与版本管理
 

@@ -56,11 +56,17 @@ namespace VRGloveDataCapture.UserInterface
         private Transform mainStateRoot;
         private GameObject panelRoot;
         private TextMesh noticeText;
+        private FieldInfo vendorCalibrationCompleteField;
+        private Delegate vendorCalibrationCompleteCallback;
         private bool featureUnlocked;
         private bool waitingForRecalibration;
         private bool sawRecalibrationInProgress;
+        private bool calibrationCompletionSignal;
         private float nextDiscoveryTime;
         private float nextStatusUpdateTime;
+        private float nextDiscoveryIssueLogTime;
+        private string calibrationCompletionSource;
+        private string lastDiscoveryIssue;
         private string notice = "CALIBRATION COMPLETE - gaze at a control to activate it.";
 
         public bool IsFeaturePanelVisible
@@ -68,26 +74,42 @@ namespace VRGloveDataCapture.UserInterface
             get { return panelRoot != null && panelRoot.activeInHierarchy; }
         }
 
+        [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
+        private static void ResetRuntimeState()
+        {
+            instance = null;
+        }
+
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.BeforeSceneLoad)]
         private static void Install()
         {
-            if (instance != null)
-            {
-                return;
-            }
-
+            // This controller is runtime-owned and must be recreated for every Play
+            // session. Reusing Resources.FindObjectsOfTypeAll results can select a
+            // stale hidden instance and silently skip installation.
             GazeFunctionPanelController[] existing =
                 Resources.FindObjectsOfTypeAll<GazeFunctionPanelController>();
-            if (existing.Length > 0)
+            for (int index = 0; index < existing.Length; index++)
             {
-                instance = existing[0];
-                return;
+                GazeFunctionPanelController candidate = existing[index];
+                if (candidate == null || candidate.gameObject == null ||
+                    !candidate.gameObject.scene.IsValid())
+                {
+                    continue;
+                }
+
+                candidate.SetFeaturePanel(false);
+                candidate.UnbindVendorCalibrationCompletion();
+                candidate.enabled = false;
+                Destroy(candidate.gameObject);
             }
+
+            instance = null;
 
             GameObject installer = new GameObject(InstallerName);
             installer.hideFlags = HideFlags.DontSave;
             DontDestroyOnLoad(installer);
             instance = installer.AddComponent<GazeFunctionPanelController>();
+            Debug.Log("[GazeControlPanel] Runtime installer created for this Play session.", instance);
         }
 
         private void Awake()
@@ -100,6 +122,7 @@ namespace VRGloveDataCapture.UserInterface
 
             instance = this;
             DontDestroyOnLoad(gameObject);
+            EnsureVendorCalibrationCompletionBinding();
         }
 
         private void Update()
@@ -129,9 +152,11 @@ namespace VRGloveDataCapture.UserInterface
 
         private void DiscoverAndBuild()
         {
+            EnsureVendorCalibrationCompletionBinding();
             Component nextMenu = FindSceneComponent("HI5.VRCalibration.MenuStateMachine");
             if (nextMenu == null)
             {
+                ReportDiscoveryIssue("HI5 MenuStateMachine is not loaded");
                 return;
             }
 
@@ -148,12 +173,32 @@ namespace VRGloveDataCapture.UserInterface
             selectionRadial = ReadField(raycaster, "m_SelectionRadial") as Component;
             mainStateRoot = FindMainStateRoot(menuStateMachine);
 
-            if (interactiveItemType == null || selectionRadial == null || mainStateRoot == null)
+            if (interactiveItemType == null)
             {
+                ReportDiscoveryIssue("HI5 VRInteractiveItem type is unavailable");
+                TearDownPanel();
+                return;
+            }
+            if (raycaster == null)
+            {
+                ReportDiscoveryIssue("HI5 VREyeRaycaster is not loaded");
+                TearDownPanel();
+                return;
+            }
+            if (selectionRadial == null)
+            {
+                ReportDiscoveryIssue("VREyeRaycaster has no SelectionRadial reference");
+                TearDownPanel();
+                return;
+            }
+            if (mainStateRoot == null)
+            {
+                ReportDiscoveryIssue("HI5 Main menu state root is unavailable");
                 TearDownPanel();
                 return;
             }
 
+            ClearDiscoveryIssue();
             PrepareVendorInteractionEntry();
             for (int index = 0; index < mainStateRoot.childCount; index++)
             {
@@ -166,12 +211,20 @@ namespace VRGloveDataCapture.UserInterface
             }
 
             BuildPanel();
-            featureUnlocked = IsManagerCalibrationComplete() ||
-                              string.Equals(GetCalibrationStateName(), "Finish", StringComparison.Ordinal);
-            SetFeaturePanel(featureUnlocked);
-            if (featureUnlocked)
+            bool alreadyComplete = calibrationCompletionSignal ||
+                                   IsManagerCalibrationComplete() ||
+                                   string.Equals(GetCalibrationStateName(), "Finish", StringComparison.Ordinal);
+            if (alreadyComplete)
             {
-                SetMenuState("Main");
+                CompleteCalibrationTransition(
+                    string.IsNullOrEmpty(calibrationCompletionSource)
+                        ? "initial calibration state"
+                        : calibrationCompletionSource);
+            }
+            else
+            {
+                featureUnlocked = false;
+                SetFeaturePanel(false);
             }
 
             Debug.Log(
@@ -181,6 +234,15 @@ namespace VRGloveDataCapture.UserInterface
 
         private void UpdateCalibrationTransition()
         {
+            if (calibrationCompletionSignal)
+            {
+                CompleteCalibrationTransition(
+                    string.IsNullOrEmpty(calibrationCompletionSource)
+                        ? "HI5 calibration completion callback"
+                        : calibrationCompletionSource);
+                return;
+            }
+
             string state = GetCalibrationStateName();
             if (waitingForRecalibration)
             {
@@ -194,11 +256,7 @@ namespace VRGloveDataCapture.UserInterface
                 if (sawRecalibrationInProgress &&
                     string.Equals(state, "Finish", StringComparison.Ordinal))
                 {
-                    waitingForRecalibration = false;
-                    featureUnlocked = true;
-                    notice = "RECALIBRATION COMPLETE - controls are ready.";
-                    SetFeaturePanel(true);
-                    SetMenuState("Main");
+                    CompleteCalibrationTransition("CalibrationStateMachine.Finish fallback");
                 }
                 return;
             }
@@ -207,18 +265,44 @@ namespace VRGloveDataCapture.UserInterface
                 (IsManagerCalibrationComplete() ||
                  string.Equals(state, "Finish", StringComparison.Ordinal)))
             {
-                featureUnlocked = true;
-                notice = "CALIBRATION COMPLETE - controls are ready.";
-                SetFeaturePanel(true);
-                SetMenuState("Main");
+                CompleteCalibrationTransition(
+                    IsManagerCalibrationComplete()
+                        ? "HI5_Manager_Thread.IsCalibrationComplete fallback"
+                        : "CalibrationStateMachine.Finish fallback");
             }
+        }
+
+        private void CompleteCalibrationTransition(string source)
+        {
+            bool wasRecalibration = waitingForRecalibration;
+            waitingForRecalibration = false;
+            sawRecalibrationInProgress = false;
+            calibrationCompletionSignal = false;
+            calibrationCompletionSource = string.Empty;
+            featureUnlocked = true;
+            notice = wasRecalibration
+                ? "RECALIBRATION COMPLETE - controls are ready."
+                : "CALIBRATION COMPLETE - controls are ready.";
+
+            // Activate the vendor Main state first, then replace its entries with
+            // the project panel. The panel itself is a sibling of Main, so a later
+            // vendor Exit toggle cannot make the unlocked controls disappear.
+            SetMenuState("Main");
+            SetFeaturePanel(true);
+            Debug.Log(
+                "[GazeControlPanel] Function controls unlocked via " + source +
+                "; panelActive=" + IsFeaturePanelVisible + ".",
+                this);
         }
 
         private void BuildPanel()
         {
             panelRoot = new GameObject(PanelName);
-            panelRoot.transform.SetParent(mainStateRoot, false);
-            panelRoot.transform.localPosition = new Vector3(0.0f, 0.0f, -0.08f);
+            Transform panelTransform = panelRoot.transform;
+            panelTransform.SetParent(mainStateRoot.parent, false);
+            panelTransform.localRotation = mainStateRoot.localRotation;
+            panelTransform.localScale = mainStateRoot.localScale;
+            panelTransform.position = mainStateRoot.TransformPoint(0.0f, 0.0f, -0.08f);
 
             CreateRoundedSurface(
                 "BackgroundBorder",
@@ -842,6 +926,130 @@ namespace VRGloveDataCapture.UserInterface
             return value == null ? string.Empty : value.ToString();
         }
 
+        private void EnsureVendorCalibrationCompletionBinding()
+        {
+            if (vendorCalibrationCompleteField != null &&
+                vendorCalibrationCompleteCallback != null)
+            {
+                return;
+            }
+
+            Type calibrationType = FindType("HI5.HI5_Calibration");
+            FieldInfo callbackField = calibrationType == null
+                ? null
+                : calibrationType.GetField(
+                    "OnCalibrationComplete",
+                    BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic);
+            if (callbackField == null || !typeof(Delegate).IsAssignableFrom(callbackField.FieldType))
+            {
+                return;
+            }
+
+            MethodInfo invokeMethod = callbackField.FieldType.GetMethod("Invoke");
+            ParameterInfo[] parameters = invokeMethod == null
+                ? new ParameterInfo[0]
+                : invokeMethod.GetParameters();
+            if (parameters.Length != 1)
+            {
+                return;
+            }
+
+            try
+            {
+                MethodInfo genericHandler = GetType().GetMethod(
+                    "HandleVendorCalibrationComplete",
+                    BindingFlags.Instance | BindingFlags.NonPublic);
+                MethodInfo closedHandler = genericHandler.MakeGenericMethod(parameters[0].ParameterType);
+                Delegate callback = Delegate.CreateDelegate(callbackField.FieldType, this, closedHandler);
+                Delegate current = callbackField.GetValue(null) as Delegate;
+                callbackField.SetValue(null, Delegate.Combine(current, callback));
+                vendorCalibrationCompleteField = callbackField;
+                vendorCalibrationCompleteCallback = callback;
+                Debug.Log(
+                    "[GazeControlPanel] Bound to HI5_Calibration.OnCalibrationComplete.",
+                    this);
+            }
+            catch (Exception exception)
+            {
+                Debug.LogWarning(
+                    "[GazeControlPanel] Could not bind the HI5 calibration completion callback: " +
+                    exception.Message,
+                    this);
+            }
+        }
+
+        private void HandleVendorCalibrationComplete<TPose>(TPose pose)
+        {
+            object boxedPose = pose;
+            string poseName = boxedPose == null ? string.Empty : boxedPose.ToString();
+            if (!string.Equals(poseName, "PPose", StringComparison.Ordinal))
+            {
+                return;
+            }
+
+            // Latch the callback until Update so vendor multicast handlers can
+            // finish their own state transitions before we activate the panel.
+            calibrationCompletionSignal = true;
+            calibrationCompletionSource = "HI5_Calibration.OnCalibrationComplete(PPose)";
+        }
+
+        private void UnbindVendorCalibrationCompletion()
+        {
+            if (vendorCalibrationCompleteField == null ||
+                vendorCalibrationCompleteCallback == null)
+            {
+                return;
+            }
+
+            try
+            {
+                Delegate current = vendorCalibrationCompleteField.GetValue(null) as Delegate;
+                vendorCalibrationCompleteField.SetValue(
+                    null,
+                    Delegate.Remove(current, vendorCalibrationCompleteCallback));
+            }
+            catch (Exception)
+            {
+                // The vendor static may already have been cleared during shutdown.
+            }
+
+            vendorCalibrationCompleteField = null;
+            vendorCalibrationCompleteCallback = null;
+        }
+
+        private void ReportDiscoveryIssue(string issue)
+        {
+            if (!string.Equals(lastDiscoveryIssue, issue, StringComparison.Ordinal))
+            {
+                lastDiscoveryIssue = issue;
+                nextDiscoveryIssueLogTime = Time.unscaledTime + 2.0f;
+                return;
+            }
+
+            if (Time.unscaledTime < nextDiscoveryIssueLogTime)
+            {
+                return;
+            }
+
+            nextDiscoveryIssueLogTime = Time.unscaledTime + 5.0f;
+            Debug.LogWarning(
+                "[GazeControlPanel] Waiting to build the panel: " + issue + ".",
+                this);
+        }
+
+        private void ClearDiscoveryIssue()
+        {
+            if (!string.IsNullOrEmpty(lastDiscoveryIssue))
+            {
+                Debug.Log(
+                    "[GazeControlPanel] Panel dependencies are ready after waiting for " +
+                    lastDiscoveryIssue + ".",
+                    this);
+            }
+
+            lastDiscoveryIssue = string.Empty;
+        }
+
         private static bool IsManagerCalibrationComplete()
         {
             Type managerType = FindType("HI5.HI5_Manager_Thread") ?? FindType("HI5_Manager_Thread");
@@ -903,8 +1111,29 @@ namespace VRGloveDataCapture.UserInterface
                 return null;
             }
 
-            UnityEngine.Object found = FindObjectOfType(type);
-            return found as Component;
+            UnityEngine.Object[] found = Resources.FindObjectsOfTypeAll(type);
+            Component inactiveFallback = null;
+            for (int index = 0; index < found.Length; index++)
+            {
+                Component candidate = found[index] as Component;
+                if (candidate == null || !candidate.gameObject.scene.IsValid() ||
+                    !candidate.gameObject.scene.isLoaded)
+                {
+                    continue;
+                }
+
+                if (candidate.gameObject.activeInHierarchy)
+                {
+                    return candidate;
+                }
+
+                if (inactiveFallback == null)
+                {
+                    inactiveFallback = candidate;
+                }
+            }
+
+            return inactiveFallback;
         }
 
         private static Type FindType(string fullTypeName)
@@ -962,6 +1191,7 @@ namespace VRGloveDataCapture.UserInterface
 
         private void OnDestroy()
         {
+            UnbindVendorCalibrationCompletion();
             TearDownPanel();
             if (instance == this)
             {

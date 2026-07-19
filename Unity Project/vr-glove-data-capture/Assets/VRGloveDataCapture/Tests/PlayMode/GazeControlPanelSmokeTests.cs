@@ -49,6 +49,13 @@ namespace VRGloveDataCapture.Tests
                 panelRoot = null;
                 for (int index = 0; index < controllers.Length; index++)
                 {
+                    if (!controllers[index].enabled ||
+                        !controllers[index].gameObject.activeInHierarchy ||
+                        !controllers[index].gameObject.scene.IsValid())
+                    {
+                        continue;
+                    }
+
                     GameObject candidatePanel =
                         panelRootField.GetValue(controllers[index]) as GameObject;
                     if (candidatePanel != null)
@@ -67,6 +74,59 @@ namespace VRGloveDataCapture.Tests
 
             Assert.IsNotNull(controller, "The scene-independent gaze panel installer did not start.");
             Assert.IsNotNull(panelRoot, "The gaze panel did not bind to the vendor main menu.");
+
+            // Recreate the runtime installer inside the same Play session. This
+            // reproduces the old hidden-instance regression without requiring a
+            // second external Test Runner invocation.
+            GazeFunctionPanelController firstController = controller;
+            MethodInfo resetRuntimeState = typeof(GazeFunctionPanelController).GetMethod(
+                "ResetRuntimeState",
+                BindingFlags.NonPublic | BindingFlags.Static);
+            MethodInfo installRuntimeController = typeof(GazeFunctionPanelController).GetMethod(
+                "Install",
+                BindingFlags.NonPublic | BindingFlags.Static);
+            Assert.IsNotNull(resetRuntimeState, "The gaze installer has no runtime reset hook.");
+            Assert.IsNotNull(installRuntimeController, "The gaze installer entry point is unavailable.");
+            resetRuntimeState.Invoke(null, null);
+            installRuntimeController.Invoke(null, null);
+
+            controller = null;
+            panelRoot = null;
+            for (int frame = 0; frame < 300; frame++)
+            {
+                GazeFunctionPanelController[] controllers =
+                    Resources.FindObjectsOfTypeAll<GazeFunctionPanelController>();
+                for (int index = 0; index < controllers.Length; index++)
+                {
+                    GazeFunctionPanelController candidate = controllers[index];
+                    if (candidate == firstController || !candidate.enabled ||
+                        !candidate.gameObject.activeInHierarchy ||
+                        !candidate.gameObject.scene.IsValid())
+                    {
+                        continue;
+                    }
+
+                    GameObject candidatePanel = panelRootField.GetValue(candidate) as GameObject;
+                    if (candidatePanel != null)
+                    {
+                        controller = candidate;
+                        panelRoot = candidatePanel;
+                        break;
+                    }
+                }
+
+                if (controller != null)
+                {
+                    break;
+                }
+
+                yield return null;
+            }
+
+            Assert.IsNotNull(controller,
+                "Replacing an old runtime installer did not produce a new active panel controller.");
+            Assert.AreNotSame(firstController, controller,
+                "The gaze installer incorrectly reused the previous runtime instance.");
             Assert.IsNotNull(FindSceneObject("Calibration"), "The vendor calibration state was removed.");
             Assert.IsNotNull(FindSceneObject("Btn_Calibrate"), "The original gaze calibration entry was removed.");
 
@@ -101,8 +161,9 @@ namespace VRGloveDataCapture.Tests
             Assert.AreEqual("Exit", ReadEnumField(interactionEntry.gameObject, "EnterState"),
                 "Gazing Interaction still invokes ReConnect instead of entering interaction mode.");
 
-            // Hardware-free test: drive the real production completion detector
-            // through the vendor manager field instead of directly forcing UI state.
+            // Hardware-free test: invoke the same authoritative PPose callback
+            // broadcast by the vendor CalibrationInstance. Keep the manager flag
+            // false so this cannot pass through the older polling fallback.
             Type managerType = FindType("HI5.HI5_Manager_Thread");
             Assert.IsNotNull(managerType, "The namespaced Hi5 calibration manager type is unavailable.");
             MethodInfo managerInstance = managerType.GetMethod(
@@ -115,14 +176,57 @@ namespace VRGloveDataCapture.Tests
                 BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
             Assert.IsNotNull(completionField, "The Hi5 calibration completion field is unavailable.");
             bool originalCompletion = (bool)completionField.GetValue(manager);
-            completionField.SetValue(manager, true);
-            MethodInfo updateCalibration = typeof(GazeFunctionPanelController).GetMethod(
-                "UpdateCalibrationTransition",
+            completionField.SetValue(manager, false);
+
+            Type calibrationType = FindType("HI5.HI5_Calibration");
+            Type poseType = FindType("HI5.HI5_Pose");
+            Assert.IsNotNull(calibrationType, "The Hi5 calibration API type is unavailable.");
+            Assert.IsNotNull(poseType, "The Hi5 calibration pose type is unavailable.");
+            FieldInfo callbackField = calibrationType.GetField(
+                "OnCalibrationComplete",
+                BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static);
+            Assert.IsNotNull(callbackField, "The Hi5 calibration completion callback is unavailable.");
+            Delegate completionCallbacks = callbackField.GetValue(null) as Delegate;
+            Assert.IsNotNull(completionCallbacks,
+                "The gaze controller did not subscribe to the Hi5 calibration callback.");
+            FieldInfo boundCallbackField = typeof(GazeFunctionPanelController).GetField(
+                "vendorCalibrationCompleteCallback",
                 BindingFlags.NonPublic | BindingFlags.Instance);
-            updateCalibration.Invoke(controller, null);
+            Delegate boundCallback = boundCallbackField.GetValue(controller) as Delegate;
+            Assert.IsNotNull(boundCallback,
+                "The active gaze controller has no bound calibration callback.");
+            CollectionAssert.Contains(
+                completionCallbacks.GetInvocationList(),
+                boundCallback,
+                "The active controller callback is not in the vendor multicast delegate.");
+            boundCallback.DynamicInvoke(Enum.Parse(poseType, "VPose"));
+            yield return null;
+            Assert.IsFalse(controller.IsFeaturePanelVisible,
+                "VPose completion incorrectly unlocked the function controls.");
+            boundCallback.DynamicInvoke(Enum.Parse(poseType, "BPose"));
+            yield return null;
+            Assert.IsFalse(controller.IsFeaturePanelVisible,
+                "BPose completion incorrectly unlocked the function controls.");
+            boundCallback.DynamicInvoke(Enum.Parse(poseType, "PPose"));
             yield return null;
             Assert.IsTrue(controller.IsFeaturePanelVisible,
-                "The function panel did not unlock after real Hi5 calibration completion.");
+                "The function panel did not unlock after the authoritative PPose completion callback.");
+            Assert.AreEqual(mainRoot.parent, panelRoot.transform.parent,
+                "The function panel is still parented under the vendor Main state.");
+
+            FieldInfo menuMachineField = typeof(GazeFunctionPanelController).GetField(
+                "menuStateMachine",
+                BindingFlags.NonPublic | BindingFlags.Instance);
+            Component menuMachine = menuMachineField.GetValue(controller) as Component;
+            Assert.IsNotNull(menuMachine, "The active gaze controller lost the vendor menu state machine.");
+            PropertyInfo menuStateProperty = menuMachine.GetType().GetProperty("State");
+            menuStateProperty.SetValue(
+                menuMachine,
+                Enum.Parse(menuStateProperty.PropertyType, "Exit"),
+                null);
+            yield return null;
+            Assert.IsTrue(controller.IsFeaturePanelVisible,
+                "The vendor physical-hand Exit toggle can still permanently hide the unlocked panel.");
 
             for (int frame = 0; frame < 12; frame++)
             {

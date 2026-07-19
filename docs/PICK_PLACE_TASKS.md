@@ -18,7 +18,7 @@ Tools > VR Glove Data Capture > Task Setups > Open Pick Place Task Setup
 
 | Scene | 内容 | Git 状态 | 编辑规则 |
 |---|---|---|---|
-| `TableScene_Vive` | 原厂校准流程、虚拟手、状态面板、示例物体、实体复位按钮 | 本地 SDK，Git 忽略 | 保持原厂，不直接修改 |
+| `TableScene_Vive` | 原厂校准流程、虚拟手、状态面板、示例物体、实体复位按钮 | 本地 SDK，Git 忽略 | 可直接调整现有对象并保存到本机 |
 | `PickPlaceTasks` | `Task_Worktable`、YCB 物体、彩色方块、容器、触发区、任务控制器 | 本仓库跟踪 | 在 Scene View 中直接编辑 |
 
 **`PickPlaceTasks` 必须保持为 Active Scene**。自动加载器会在打开任务场景后设置这一状态，因此新建、复制或拖入的对象默认保存到项目任务场景，而不是写进原厂场景。
@@ -33,7 +33,7 @@ Tools > VR Glove Data Capture > Task Setups > Open Pick Place Task Setup
 Assets/Hi5_Interaction_SDK/Scenes/Vive/TableScene_Vive.unity
 ```
 
-`TaskSetupSceneWorkspace` 监听 Unity 的场景打开事件。只要发现标记，它就以 **Additive** 模式加载上述基础场景，并重新把任务场景设为 Active Scene。这样每一个通过项目菜单建立的任务 setup 都复用原厂校准与状态面板，但不复制、不修改专有 `.unity` 文件。
+`TaskSetupSceneWorkspace` 监听 Unity 的场景打开事件。只要发现标记，它就以 **Additive** 模式加载上述基础场景，并重新把任务场景设为 Active Scene。这样每一个通过项目菜单建立的任务 setup 都复用原厂校准与状态面板，不复制专有 `.unity` 文件；对原厂现有对象所做的变换修改则可以直接保存到本地基础场景。
 
 ### 运行阶段
 
@@ -44,7 +44,6 @@ Assets/Hi5_Interaction_SDK/Scenes/Vive/TableScene_Vive.unity
 3. Hi5 接管可抓物体后，控制器记录新的初始父节点、世界位置、旋转和缩放。
 4. `PickPlaceTargetZone` 监听匹配物体进入目标触发体。
 5. 控制器订阅原厂 `messageObjectReset`，把新增任务接入同一个实体复位按钮。
-6. `VendorDemoLayoutOffset` 幂等地把原厂示例家具和相关物体移动到左右侧，中央工作桌保持无遮挡；收到原厂整场复位消息后，会在下一帧重新应用侧移，避免厂商组件的缓存位置把物体带回中央。
 
 如果只打开原厂 `TableScene_Vive`，项目**不会再在 Play Mode 临时生成第二套任务布局**。所有 pick-and-place 内容只由项目自有 `PickPlaceTasks` 持久化场景提供，从源头避免可见模型与实际被抓物体分属两套实例而产生“残影/隔空抓取”。
 
@@ -52,7 +51,7 @@ Assets/Hi5_Interaction_SDK/Scenes/Vive/TableScene_Vive.unity
 
 任务场景自带 `Task_Worktable`：桌面中心约为 `(0.08, 0.65, 0.70)`，尺寸为 `1.80 × 0.08 × 0.72 m`，可操作表面高度为 `0.69 m`；桌面和四条桌腿均使用实体 Collider 与 `Hi5Plane` 层。任务物体按其**实际世界空间 Collider 下边界**落在桌面上方 `12 mm`，避免未激活对象的空 `bounds` 导致开场穿桌或自由落体。
 
-编辑态 `TaskSetupSceneWorkspace` 与运行时 `VendorDemoLayoutOffset` 共用同一组绝对位置规则：打开任务 setup 后，Scene View 会立即显示原厂示例桌、按钮和随桌物体位于左右侧区，中央任务台保持无遮挡。编辑态预览在保存、关闭、脚本重载和进入 Play Mode 前恢复原坐标，并保持原厂 Scene 为未修改状态；运行时再幂等地应用相同规则。因此不会累计漂移，也不会把侧移保存到原厂 `TableScene_Vive.unity`。
+项目不再对原厂物体套用编辑态预览回滚或运行时固定坐标。打开双场景工作区后，可以直接把原厂示例桌和物体移到两侧；按 `Ctrl+S` 会保存所有已修改的打开场景，保存后的姿态就是下一次 Play Mode 的初始姿态。原厂可交互物体自身的 reset 组件会在启用时缓存该姿态，因此实体复位按钮仍会返回本次 Play 启动时的布局。`Assets/Hi5_Interaction_SDK/` 被 Git 忽略，所以这些调整仅保存在当前电脑；仓库跟踪的 `PickPlaceTasks` 仍可通过 Git 在团队间同步。
 
 ## 任务清单
 
@@ -70,12 +69,22 @@ Assets/Hi5_Interaction_SDK/Scenes/Vive/TableScene_Vive.unity
 
 ### 调整现有任务
 
-1. 在 Hierarchy 中只编辑 `PickPlaceTasks` 下的 `VRGlove_PickPlace_Tasks`。
+1. 编辑项目任务时，在 Hierarchy 中编辑 `PickPlaceTasks` 下的 `VRGlove_PickPlace_Tasks`。
 2. 移动起始物体、目标容器和对应的 `*_Success_Zone`；默认布局不再包含蓝色起始垫或悬浮文字。
 3. `Task_Worktable` 与任务物体同属项目 Scene，可直接移动；若改变桌面高度，应同步调整起始物体和目标容器。
 4. 调整目标区时，同时检查其 `BoxCollider` 大小，避免视觉容器与成功体积不一致。
 5. 保存场景；物体当前世界位姿会在下一次进入 Play Mode 时成为复位位姿。
 6. 不要把 Hi5 专有 simple-object 组件手工保存到任务场景，它们由运行时桥接器统一添加。
+
+### 调整原厂示例区
+
+1. 在 Hierarchy 顶部确认同时打开 `TableScene_Vive` 与 `PickPlaceTasks`。
+2. 选择原厂桌子或物体；Inspector 顶部对象所属 Scene 应为 `TableScene_Vive`。
+3. 在 Scene View 中移动、旋转或缩放现有对象，为中央任务台留出空间。
+4. 按 `Ctrl+S`，确认 `TableScene_Vive` 名称右侧的未保存标记消失。
+5. 进入 Play Mode 验证布局；项目不会再用固定 X 坐标覆盖这些变换。
+
+不要执行 `Rebuild Pick Place Task Setup` 来保存原厂布局；该命令只重建并覆盖仓库跟踪的 `PickPlaceTasks.unity`。本地原厂布局不会包含在 Git 提交中。
 
 ### 增加一个可抓物体
 
@@ -159,7 +168,7 @@ PickPlaceTaskSceneSmokeTests.EditableTaskSceneBindsFiveTasksAndHi5ResetRestoresT
 
 在 Edit Mode 下按 `Ctrl+Shift+F7`，或执行 `Tools > VR Glove Data Capture > Task Setups > Run Pick Place Play Mode Test`，即可单独运行该回归测试。Console 汇总 `passed=1, failed=0, skipped=0` 表示通过。
 
-测试先加载原厂场景，使 Hi5 manager 就绪，再以 Additive 模式加载持久化任务场景，并验证：没有悬浮文字、起始垫或重复渲染子对象；实体工作桌、四条桌腿及其碰撞层正确；5 个对象均处于桌面投影范围且实际 Collider 下边界不穿桌；原厂示例区完整移到两侧且整场复位后仍保持侧移；5 个对象 ID 唯一且完成 Hi5 绑定；全部对象具备动态重力和实体 Collider；马克杯保存的初始姿态直立；5 个目标判据全部触发；`messageObjectReset` 恢复位置、动态刚体状态、速度、任务进度和目标颜色。未安装本地 Hi5 Interaction SDK 时测试标记为忽略。
+测试先加载原厂场景，使 Hi5 manager 就绪，再以 Additive 模式加载持久化任务场景，并验证：没有悬浮文字、起始垫或重复渲染子对象；实体工作桌、四条桌腿及其碰撞层正确；5 个对象均处于桌面投影范围且实际 Collider 下边界不穿桌；5 个对象 ID 唯一且完成 Hi5 绑定；全部对象具备动态重力和实体 Collider；马克杯保存的初始姿态直立；5 个目标判据全部触发；`messageObjectReset` 恢复位置、动态刚体状态、速度、任务进度和目标颜色。原厂示例区位置是用户本机配置，自动测试不再断言固定坐标。未安装本地 Hi5 Interaction SDK 时测试标记为忽略。
 
 ### 实机检查
 

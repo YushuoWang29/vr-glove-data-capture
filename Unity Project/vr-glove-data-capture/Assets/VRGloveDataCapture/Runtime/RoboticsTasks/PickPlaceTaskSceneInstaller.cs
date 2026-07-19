@@ -36,7 +36,6 @@ namespace VRGloveDataCapture.RoboticsTasks
             SceneManager.MoveGameObjectToScene(root, scene);
 
             PickPlaceTaskSceneController controller = root.AddComponent<PickPlaceTaskSceneController>();
-            root.AddComponent<VendorDemoLayoutOffset>();
             Material structureMaterial = CreateMaterial("Task structure", SlateColor, 0.15f, 0.35f);
             Material tableMaterial = CreateMaterial("Task worktable", TableColor, 0.02f, 0.28f);
             CreateWorktable(root.transform, anchor.x, origin.z + 0.02f, surfaceY, tableMaterial);
