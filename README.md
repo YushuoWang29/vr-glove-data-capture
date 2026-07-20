@@ -228,7 +228,7 @@ Tools > VR Glove Data Capture > Task Setups > Open Pick Place Task Setup
 Tools > VR Glove Data Capture > VR Runtime > Validate SteamVR and HMD
 ```
 
-只有弹窗显示 **SteamVR/OpenVR is ready and the HMD is connected** 后再按 Play。项目也会在进入 VR Scene 的 Play Mode 前自动执行同一检查；若 OpenVR 未就绪，会取消本次 Play 并给出处理顺序，避免 Unity 在无头显画面的状态下继续运行。仅做桌面调试时可执行一次性旁路菜单 `Allow Desktop-Only Play Once`。
+只有弹窗显示 **OpenVR is installed and an HMD is present** 后再按 Play。该预检只调用 OpenVR 官方的轻量存在查询，不会创建 `VRApplication_Background`，也不会执行 `VR_Shutdown`。项目会在进入 VR Scene 前自动执行同一检查；若运行时或 HMD 不存在，会取消本次 Play。真正的显示连接由 OpenVR XR Loader 在 Play 启动阶段独占创建；成功判据是 Console 出现 **`[XRBootstrap] XR scene session is running`**。仅做桌面调试时可执行一次性旁路菜单 `Allow Desktop-Only Play Once`，但该旁路不会启动 XR，也不能用于修复头显无画面。
 
 进入 Play Mode 后，项目会自动执行以下扩展：
 
@@ -263,7 +263,7 @@ Tools > VR Glove Data Capture > VR Runtime > Validate SteamVR and HMD
 | `F8` | 发布全场复位消息 | 新增物体、任务进度和目标颜色恢复 |
 | 校准后注视功能按钮 | 与 `P/F9/F12/F11/F8` 相同的公共控制接口，并提供重新校准 | 按钮第二行实时显示 `LIVE`、`RECORDING`、`READY` 或不可用原因 |
 | `Ctrl+Shift+F7`（Edit Mode） | 运行 pick-and-place Play Mode 冒烟测试 | Console 出现 `passed=1, failed=0, skipped=0` |
-| `Ctrl+Shift+F10`（Edit Mode） | 运行项目全部 4 项 Play Mode 回归测试 | Console 出现 `passed=4, failed=0, skipped=0` |
+| `Ctrl+Shift+F10`（Edit Mode） | 运行项目全部 5 项 Play Mode 回归测试 | Console 出现 `passed=5, failed=0, skipped=0` |
 | 场景实体复位按钮 | 与 `F8` 相同的统一复位 | 原厂物体和新增任务物体同时恢复 |
 
 三个 Edit Mode 命令使用 Unity `Shortcut` API 注册，可在 `Edit > Shortcuts` 的 **VR Glove Data Capture** 分类下重新绑定。项目不再占用无修饰键的 `F6`、`F7` 和 `F10`，从而避免与 Terrain 和 Recorder 默认快捷键冲突。Play Mode 的 `F8/F9/F11/F12` 是 Game View 运行时输入，不注册为编辑器全局命令。
@@ -377,7 +377,7 @@ AdaptiveHandContactSmokeTests.SolverAutoInstallsOnBothVisibleHandsWithoutWriting
 GazeControlPanelSmokeTests.PanelPreservesCalibrationAndRoutesVendorGazeToProjectControls
 ```
 
-该测试验证每次 Play 都能建立有效的运行时面板、原厂校准对象不被删除、`Reconnect` 与 `Interaction` 分居独立槽位且碰撞体不重叠、P-pose 权威完成回调可解锁六个注视控件、原厂手势把菜单切到 `Exit` 后功能面板仍可见、驻留完成可调用透视控制、Unity 2019.4.18f1 固定使用 Multi Pass 且阻止误入 SPI，以及 VIVE Pro 2 左右眼区与负 V 纹理翻转保持独立。按 **`Ctrl+Shift+F10`**（Edit Mode）或执行 `Tools > VR Glove Data Capture > Run All Project Play Mode Tests` 可以一次运行注视面板、手–物体接触、pick-and-place 复位和统一采集四项测试。
+该测试验证每次 Play 都能建立有效的运行时面板、原厂校准对象不被删除、`Reconnect` 与 `Interaction` 分居独立槽位且碰撞体不重叠、P-pose 权威完成回调可解锁六个注视控件、原厂手势把菜单切到 `Exit` 后功能面板仍可见、驻留完成可调用透视控制、Unity 2019.4.18f1 固定使用 Multi Pass 且阻止误入 SPI，以及 VIVE Pro 2 左右眼区与负 V 纹理翻转保持独立。按 **`Ctrl+Shift+F10`**（Edit Mode）或执行 `Tools > VR Glove Data Capture > Run All Project Play Mode Tests` 可以一次运行注视面板、手–物体接触、pick-and-place 复位、统一采集和 OpenVR 存在预检非干扰五项测试。最后一项在无 XR 的批处理环境中验证托管状态不被改变；完整 Scene 会话仍以实机日志中的 `VRApplication_Scene`、`display=True` 和 `input=True` 为准。
 
 统一采集的端到端测试为：
 
@@ -399,7 +399,9 @@ UnifiedCaptureSmokeTests.TrialFinalizesAtomicMachineReadableStreamsAndManifest
 
 ### 进入 Play Mode 后头显没有 Unity 画面
 
-先退出 Play Mode，等待 SteamVR 从 `Connecting` 变为 **Ready**，再执行 `Tools > VR Glove Data Capture > VR Runtime > Validate SteamVR and HMD`。检查通过后重新进入 Play Mode。项目现会阻止 OpenVR 未初始化、HMD 未连接时启动 VR Scene；诊断日志中的 `Not Initialized (109)` 表示 Unity 进入 Play 时 OpenVR 尚未完成初始化，而不是任务 Scene 或显示相机缺失。
+先看 Console 是否出现 **`[XRBootstrap] XR scene session is running`**。若没有而出现 `Not Initialized (109)`，说明 SteamVR 脚本运行前 **OpenVR XR Loader 没有建立 `VRApplication_Scene`**，与任务 Scene 或显示相机是否存在无关。退出 Play Mode，等待 SteamVR 从 `Connecting` 变为 **Ready**，执行 `Tools > VR Glove Data Capture > VR Runtime > Validate SteamVR and HMD`，再重新进入 Play Mode。项目会修复本项目在 Unity 2019 Editor 域重载后实测出现的 Standalone XR Settings 空引用状态，并在自动初始化没有生成 Loader 时于首个 Scene 前幂等重试一次；退出时仍由 XR Management 完成 Stop/Deinitialize，不直接调用 `OpenVR.Shutdown`。
+
+如果当前 Editor 进程曾运行过本修复之前的验证菜单，旧代码可能已建立并关闭过 Background 会话。更新后需**完整退出 Unity Editor、重启 SteamVR、重新打开项目一次**。从头显菜单选择“正在运行 → 退出游戏”只是结束当前 Scene 会话；修复后的下一次 Play 应重新创建会话。`Allow Desktop-Only Play Once` 只绕过硬件预检，不会启动 XR，因此不是无画面的修复手段。
 
 ### 按 `P` 后没有真实世界画面
 

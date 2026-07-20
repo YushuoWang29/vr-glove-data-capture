@@ -23,7 +23,7 @@
 
 1. 启动 SteamVR，确认头显、两个基站和两个 Tracker 均为绿色，并等待状态显示 **Ready**。
 2. 启动 Hi5 手套并确认厂商运行时已识别左右手。
-3. 在 Unity 执行 `Tools > VR Glove Data Capture > VR Runtime > Validate SteamVR and HMD`，确认 OpenVR 与 HMD 均已就绪。
+3. 在 Unity 执行 `Tools > VR Glove Data Capture > VR Runtime > Validate SteamVR and HMD`，确认 OpenVR 已安装且 HMD 可见。该检查只读取存在状态，不会创建或关闭 OpenVR 会话；真正的 `VRApplication_Scene` 会话在进入 Play Mode 时由 OpenVR XR Loader 创建。
 4. 在 Unity 中打开 `Assets/NoitomHi5/Scenes/Vive/Calibration.unity`。
 5. 进入 Play Mode，佩戴头显，按厂商示例中的注视流程完成 V-pose 校准。
 6. 完成校准后加载 Hi5 Interaction SDK 示例场景，验证左右手位置、姿态、抓取和碰撞。
@@ -48,7 +48,9 @@
 ## 常见故障边界
 
 - `Assembly-CSharp-Editor`/Burst 解析失败通常说明 Unity 版本或 SDK 编译链不匹配；本项目固定使用 Unity 2019.4.18f1。
-- 若 Play Mode 已进入但头显没有 Unity 画面，先退出 Play Mode；OpenVR `Not Initialized (109)` 表示进入时 SteamVR 尚未就绪。等待 SteamVR Ready，并通过项目的 VR Runtime 验证菜单后再启动。项目会对任务 Scene 和原厂交互 Scene 自动执行这一预检。
+- 若 Play Mode 已进入但头显没有 Unity 画面，先检查 Console。成功启动必须出现 **`[XRBootstrap] XR scene session is running`**；OpenVR `Not Initialized (109)` 表示 SteamVR 脚本运行时 XR Loader 尚未建立 Scene 会话，而不是任务 Scene 或显示相机缺失。等待 SteamVR Ready，通过项目的 VR Runtime 菜单确认 HMD 可见后重新启动。项目会对任务 Scene 和原厂交互 Scene 自动执行无副作用预检，并针对本项目实测出现的 Unity 2019 Editor XR 自动启动失效状态，在首个 Scene 之前重试一次 XR Loader。
+- 如果当前 Unity 进程曾运行过旧版 `Validate SteamVR and HMD`，该旧实现可能已经执行过 `VRApplication_Background -> VR_Shutdown`。更新代码后需要完整退出 Unity Editor、重启 SteamVR、再重新打开项目一次，以清除旧进程状态；之后不再需要为每次 Play 重启 SteamVR。
+- 从头显系统菜单执行“正在运行 → 退出游戏”会向 Unity 发送 OpenVR Quit，并退出当前 Play Mode。项目的下一次 Play 会重新建立 Scene 会话；日常调试仍建议使用 Unity 工具栏 Play 按钮结束，以便直接看到退出日志。
 - Tracker 已在 SteamVR 中上线但手的位置错误时，应先重新运行厂商 V-pose 校准，而不是修改模型骨骼。
 - 透视功能依赖 SteamVR 相机权限、VIVE Pro 2 前置摄像头和 OpenVR Tracked Camera 接口，不能由 Hi5 SDK 替代。
 - `Passthrough is ready` 只表示组件已装到相机；只有 `Passthrough Streaming: LIVE` 才表示 OpenVR 已返回连续相机帧。

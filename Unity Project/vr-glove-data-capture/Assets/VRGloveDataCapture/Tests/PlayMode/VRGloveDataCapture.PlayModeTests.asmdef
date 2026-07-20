@@ -2,7 +2,10 @@
   "name": "VRGloveDataCapture.PlayModeTests",
   "rootNamespace": "VRGloveDataCapture.Tests",
   "references": [
-    "VRGloveDataCapture.Runtime"
+    "VRGloveDataCapture.Runtime",
+    "SteamVR",
+    "Unity.XR.OpenVR",
+    "Unity.XR.Management"
   ],
   "includePlatforms": [],
   "excludePlatforms": [],

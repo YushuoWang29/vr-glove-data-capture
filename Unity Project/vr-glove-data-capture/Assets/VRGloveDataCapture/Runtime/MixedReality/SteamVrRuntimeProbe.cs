@@ -3,7 +3,10 @@ using Valve.VR;
 
 namespace VRGloveDataCapture.MixedReality
 {
-    /// <summary>Performs a short, side-effect-free OpenVR readiness probe before Play Mode.</summary>
+    /// <summary>
+    /// Checks whether OpenVR and an HMD are present without opening or closing an OpenVR session.
+    /// The XR loader is the sole owner of the scene session once Play Mode starts.
+    /// </summary>
     public static class SteamVrRuntimeProbe
     {
         public static bool TryGetReady(out string detail)
@@ -22,40 +25,13 @@ namespace VRGloveDataCapture.MixedReality
                     return false;
                 }
 
-                EVRInitError error = EVRInitError.None;
-                CVRSystem system = null;
-                bool initialized = false;
-                try
-                {
-                    system = OpenVR.Init(ref error, EVRApplicationType.VRApplication_Background);
-                    initialized = error == EVRInitError.None && system != null;
-                    if (!initialized)
-                    {
-                        detail = "OpenVR initialization failed: " + error + " (" + (int)error + "). " +
-                                 "Wait until SteamVR reports Ready before entering Play Mode.";
-                        return false;
-                    }
-
-                    if (!system.IsTrackedDeviceConnected(OpenVR.k_unTrackedDeviceIndex_Hmd))
-                    {
-                        detail = "OpenVR started, but the HMD is not connected yet. Wait until SteamVR reports Ready.";
-                        return false;
-                    }
-
-                    detail = "SteamVR/OpenVR is ready and the HMD is connected.";
-                    return true;
-                }
-                finally
-                {
-                    if (initialized)
-                    {
-                        OpenVR.Shutdown();
-                    }
-                }
+                detail = "OpenVR is installed and an HMD is present. " +
+                         "The OpenVR XR Loader will create the scene session when Play Mode starts.";
+                return true;
             }
             catch (Exception exception)
             {
-                detail = "OpenVR readiness probe failed: " + exception.GetType().Name + ": " + exception.Message;
+                detail = "OpenVR presence check failed: " + exception.GetType().Name + ": " + exception.Message;
                 return false;
             }
         }

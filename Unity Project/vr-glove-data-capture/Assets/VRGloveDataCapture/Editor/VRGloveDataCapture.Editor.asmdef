@@ -4,7 +4,9 @@
   "references": [
     "VRGloveDataCapture.Runtime",
     "Unity.Recorder.Editor",
-    "UnityEditor.TestRunner"
+    "UnityEditor.TestRunner",
+    "Unity.XR.Management",
+    "Unity.XR.Management.Editor"
   ],
   "includePlatforms": [
     "Editor"

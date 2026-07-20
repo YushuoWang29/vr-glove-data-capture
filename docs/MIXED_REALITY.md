@@ -47,8 +47,8 @@ Assets/VRGloveDataCapture/Runtime/MixedReality/
 3. 打开 `Enable Camera`。
 4. 按 SteamVR 提示执行 `Restart SteamVR`。
 5. 先用 SteamVR 自带 Room View 验证摄像头确实工作。
-6. 等待 SteamVR 状态变为 **Ready**，在 Unity 执行 `Tools > VR Glove Data Capture > VR Runtime > Validate SteamVR and HMD`。
-7. 检查通过后启动 Unity Play Mode，等待 Console 出现 `Passthrough is ready ... press P to toggle it`。这只表示组件安装完成，不代表摄像头已经出帧。
+6. 等待 SteamVR 状态变为 **Ready**，在 Unity 执行 `Tools > VR Glove Data Capture > VR Runtime > Validate SteamVR and HMD`。该菜单只检查 OpenVR 安装和 HMD 存在状态，不会创建或关闭 OpenVR 会话。
+7. 检查通过后启动 Unity Play Mode，先确认 Console 出现 **`[XRBootstrap] XR scene session is running`**，再等待 `Passthrough is ready ... press P to toggle it`。前者表示头显显示会话已建立，后者只表示透视组件安装完成，仍不代表摄像头已经出帧。
 8. 按 `P` 或在完整校准后注视 **PASSTHROUGH**，观察状态依次进入 `WaitingForSteamVr`、`WaitingForFrame` 和 `Streaming`。
 9. 以以下日志作为当前项目配置下**软件已收到连续双目帧、识别布局并配置双眼绘制**的判据：
 

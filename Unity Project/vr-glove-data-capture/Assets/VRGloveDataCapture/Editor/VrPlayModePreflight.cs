@@ -5,7 +5,7 @@ using VRGloveDataCapture.MixedReality;
 
 namespace VRGloveDataCapture.Editor
 {
-    /// <summary>Prevents the VR scenes from entering Play before SteamVR is ready.</summary>
+    /// <summary>Prevents VR scenes from entering Play when OpenVR or the HMD is absent.</summary>
     [InitializeOnLoad]
     public static class VrPlayModePreflight
     {
@@ -28,12 +28,12 @@ namespace VRGloveDataCapture.Editor
             if (ready)
             {
                 Debug.Log("[VRPreflight] " + detail);
-                EditorUtility.DisplayDialog("VR runtime ready", detail, "OK");
+                EditorUtility.DisplayDialog("VR hardware detected", detail, "OK");
             }
             else
             {
                 Debug.LogError("[VRPreflight] " + detail);
-                EditorUtility.DisplayDialog("VR runtime is not ready", BuildFailureMessage(detail), "OK");
+                EditorUtility.DisplayDialog("VR hardware not detected", BuildFailureMessage(detail), "OK");
             }
         }
 
@@ -84,7 +84,7 @@ namespace VRGloveDataCapture.Editor
                 {
                     dialogQueued = false;
                     EditorUtility.DisplayDialog(
-                        "VR runtime is not ready - Play Mode cancelled",
+                        "VR hardware not detected - Play Mode cancelled",
                         BuildFailureMessage(detail),
                         "OK");
                 };
