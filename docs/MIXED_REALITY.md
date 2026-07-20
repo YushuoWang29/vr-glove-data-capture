@@ -48,7 +48,7 @@ Assets/VRGloveDataCapture/Runtime/MixedReality/
 4. 按 SteamVR 提示执行 `Restart SteamVR`。
 5. 先用 SteamVR 自带 Room View 验证摄像头确实工作。
 6. 等待 SteamVR 状态变为 **Ready**，在 Unity 执行 `Tools > VR Glove Data Capture > VR Runtime > Validate SteamVR and HMD`。该菜单只检查 OpenVR 安装和 HMD 存在状态，不会创建或关闭 OpenVR 会话。
-7. 检查通过后启动 Unity Play Mode，先确认 Console 出现 **`[XRBootstrap] XR scene session is running`**，再等待 `Passthrough is ready ... press P to toggle it`。前者表示头显显示会话已建立，后者只表示透视组件安装完成，仍不代表摄像头已经出帧。
+7. 检查通过后启动 Unity Play Mode，先确认 Console 出现 **`[XRBootstrap] XR scene session is running. Loader=Open VR Loader, display=True, input=True.`**，再等待 `Passthrough is ready ... press P to toggle it`。前者表示 Loader、Display 和 Input 均已建立，后者只表示透视组件安装完成，仍不代表摄像头已经出帧。OpenVR 会话所有权、重进 Play Mode 和 `Not Initialized (109)` 排障见 [OPENVR_LIFECYCLE.md](OPENVR_LIFECYCLE.md)。
 8. 按 `P` 或在完整校准后注视 **PASSTHROUGH**，观察状态依次进入 `WaitingForSteamVr`、`WaitingForFrame` 和 `Streaming`。
 9. 以以下日志作为当前项目配置下**软件已收到连续双目帧、识别布局并配置双眼绘制**的判据：
 
@@ -59,7 +59,7 @@ Assets/VRGloveDataCapture/Runtime/MixedReality/
    XR draw MultiPass per-eye, Direct3D11
    ```
 
-   **OpenVR 初始化日志与 LIVE 日志必须一致**。本项目不要把 Open VR Settings 改回 Single Pass Instanced；若误改，组件会显示 `blocked (requires OpenVR MultiPass)`，且不会安装透视背景。日志中不应再出现 `x2`、`all-slices` 或 `SetInstanceMultiplier` 路径。OpenVR 设置在 XR 初始化时读取，更新本版后必须彻底退出 Play Mode并重启 Unity Editor/SteamVR，再进行实机验收。
+   **OpenVR 初始化日志与 LIVE 日志必须一致**。本项目不要把 Open VR Settings 改回 Single Pass Instanced；若误改，组件会显示 `blocked (requires OpenVR MultiPass)`，且不会安装透视背景。日志中不应再出现 `x2`、`all-slices` 或 `SetInstanceMultiplier` 路径。OpenVR 设置在 XR 初始化时读取；只有当前 Editor 曾运行旧版有副作用的预检，或日志仍出现旧 `SPI`、`x2`、`all-slices` 路径时，才需要完整退出 Unity Editor、重启 SteamVR 并重新进行实机验收。
 
 10. 在头显中确认左、右眼各自只看到**一个**现实画面，文字没有水平镜像，地面、桌面和天花板方向正确，真实画面在背景、虚拟手和交互物品在前景。正式通过时必须保持 **`per-eye Normal`**。
 11. `O` 只保留为故障隔离开关：它会在每个眼区内部旋转 180°，用于判断错误来自源图朝向还是目标投影。它不是正常配置，也不是验收条件；诊断完成后必须再按一次回到 `Normal`。

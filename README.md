@@ -105,6 +105,7 @@ flowchart LR
 | **Hi5 手指外展/内收解锁** | Play Mode 自动启用 | 关闭厂商 `finger ADB fixed`，保留手指横向自由度 | [FINGER_KINEMATICS.md](docs/FINGER_KINEMATICS.md) |
 | **PIP–DIP 耦合** | 可选，需要在手骨骼根节点配置组件 | 按比例约束 DIP 屈伸，同时保留其他旋转分量 | [FINGER_KINEMATICS.md](docs/FINGER_KINEMATICS.md) |
 | **手–物体自然交互** | Play Mode 自动安装，无需修改 Hi5 prefab | 可视指骨表面贴合；Pinch2 自适应松手；短时碰撞隔离；滤波抛掷速度；不改校准和采集源 | [HAND_OBJECT_CONTACT.md](docs/HAND_OBJECT_CONTACT.md) |
+| **OpenVR Play Mode 会话恢复** | Play Mode 前自动检查并在必要时幂等重试一次 | 避免预检关闭 OpenVR；确保 Loader、Display 和 Input 均运行；支持退出后再次 Play | [OPENVR_LIFECYCLE.md](docs/OPENVR_LIFECYCLE.md) |
 | **VIVE 双目视频透视** | Play Mode 按 `P` 开关；`O` 仅切换各眼内部 180° 朝向 | Direct 拆分 OpenVR `VerticalStereo` 左右眼区，Multi Pass 逐眼合成，虚拟物体按 Unity 深度绘制在前方 | [MIXED_REALITY.md](docs/MIXED_REALITY.md) |
 | **VR 第一视角录像** | Editor Play Mode 按 `F9` 开始/停止 | `Recordings/vr_view_*.mp4` | [VR_VIEW_RECORDING.md](docs/VR_VIEW_RECORDING.md) |
 | **统一实验数据采集** | `Capture Control` 配置；Play Mode 按 `F12` 启停 trial、`F11` 标记 | `Captures/participants/<ID>/sessions/...` 下的 CSV、事件、manifest、校验和与同步 MP4 | [DATA_CAPTURE.md](docs/DATA_CAPTURE.md) |
@@ -228,7 +229,7 @@ Tools > VR Glove Data Capture > Task Setups > Open Pick Place Task Setup
 Tools > VR Glove Data Capture > VR Runtime > Validate SteamVR and HMD
 ```
 
-只有弹窗显示 **OpenVR is installed and an HMD is present** 后再按 Play。该预检只调用 OpenVR 官方的轻量存在查询，不会创建 `VRApplication_Background`，也不会执行 `VR_Shutdown`。项目会在进入 VR Scene 前自动执行同一检查；若运行时或 HMD 不存在，会取消本次 Play。真正的显示连接由 OpenVR XR Loader 在 Play 启动阶段独占创建；成功判据是 Console 出现 **`[XRBootstrap] XR scene session is running`**。仅做桌面调试时可执行一次性旁路菜单 `Allow Desktop-Only Play Once`，但该旁路不会启动 XR，也不能用于修复头显无画面。
+只有弹窗显示 **OpenVR is installed and an HMD is present** 后再按 Play。该预检只调用 OpenVR 官方的轻量存在查询，不会创建 `VRApplication_Background`，也不会执行 `VR_Shutdown`。当项目自有 `PickPlaceTasks` 或原厂 `TableScene_Vive` 已加载时，项目会在进入 Play Mode 前自动执行同一检查；若运行时或 HMD 不存在，会取消本次 Play。真正的显示连接由 OpenVR XR Loader 在 Play 启动阶段独占创建；成功判据是 Console 出现 **`[XRBootstrap] XR scene session is running. Loader=Open VR Loader, display=True, input=True.`**。仅做桌面调试时可执行一次性旁路菜单 `Allow Desktop-Only Play Once`，但该旁路不会启动 XR，也不能用于修复头显无画面。
 
 进入 Play Mode 后，项目会自动执行以下扩展：
 
@@ -294,6 +295,7 @@ vr-glove-data-capture/
 │  ├─ FINGER_KINEMATICS.md         # 手指自由度与 PIP–DIP 耦合
 │  ├─ HAND_OBJECT_CONTACT.md        # 可视手指表面接触与数据隔离
 │  ├─ GAZE_CONTROL_PANEL.md         # 校准后注视面板、状态与安全约束
+│  ├─ OPENVR_LIFECYCLE.md           # OpenVR 会话所有权、重进 Play 与无画面排障
 │  ├─ MIXED_REALITY.md             # VIVE 视频透视
 │  ├─ VR_VIEW_RECORDING.md         # VR 第一视角录像
 │  ├─ DATA_CAPTURE.md               # session/trial、多流数据、时间戳和数据字典
@@ -361,7 +363,7 @@ PickPlaceTaskSceneSmokeTests.EditableTaskSceneBindsFiveTasksAndHi5ResetRestoresT
 5. 持握时只临时忽略抓取手碰撞，松手速度受控，碰撞在分离或超时后恢复。
 6. 刚体线速度与角速度归零，任务进度和目标颜色恢复。
 
-当前开发版本已经在 Unity `2019.4.18f1` 下通过资源验证和上述 Play Mode 测试。
+当前开发版本已经在 Unity `2019.4.18f1` 下通过资源验证和上述 Play Mode 测试。VIVE Pro 2 实机还连续完成了两轮 `Play → Stop → Play`：每轮均记录 `Loader=Open VR Loader, display=True, input=True`，并在退出时依次完成 Display Stop、Display Shutdown 和 OpenVR Shutdown。
 
 手–物体自适应视觉接触测试为：
 
@@ -399,9 +401,9 @@ UnifiedCaptureSmokeTests.TrialFinalizesAtomicMachineReadableStreamsAndManifest
 
 ### 进入 Play Mode 后头显没有 Unity 画面
 
-先看 Console 是否出现 **`[XRBootstrap] XR scene session is running`**。若没有而出现 `Not Initialized (109)`，说明 SteamVR 脚本运行前 **OpenVR XR Loader 没有建立 `VRApplication_Scene`**，与任务 Scene 或显示相机是否存在无关。退出 Play Mode，等待 SteamVR 从 `Connecting` 变为 **Ready**，执行 `Tools > VR Glove Data Capture > VR Runtime > Validate SteamVR and HMD`，再重新进入 Play Mode。项目会修复本项目在 Unity 2019 Editor 域重载后实测出现的 Standalone XR Settings 空引用状态，并在自动初始化没有生成 Loader 时于首个 Scene 前幂等重试一次；退出时仍由 XR Management 完成 Stop/Deinitialize，不直接调用 `OpenVR.Shutdown`。
+先看 Console 是否出现 **`[XRBootstrap] XR scene session is running. Loader=Open VR Loader, display=True, input=True.`**。在本项目已复现的故障日志中，若没有该成功记录而出现 `Not Initialized (109)`，通常表示 SteamVR 脚本运行前 **OpenVR XR Loader 尚未建立 `VRApplication_Scene`**；应优先排查 XR 生命周期，而不是任务 Scene 或显示 Camera。退出 Play Mode，等待 SteamVR 从 `Connecting` 变为 **Ready**，执行 `Tools > VR Glove Data Capture > VR Runtime > Validate SteamVR and HMD`，再重新进入 Play Mode。项目会修复本项目在 Unity 2019 Editor 域重载后实测出现的 Standalone XR Settings 空引用状态，并在自动初始化没有生成 Loader 时于首个 Scene 前幂等重试一次；退出时仍由 XR Management 完成 Stop/Deinitialize，不直接调用 `OpenVR.Shutdown`。
 
-如果当前 Editor 进程曾运行过本修复之前的验证菜单，旧代码可能已建立并关闭过 Background 会话。更新后需**完整退出 Unity Editor、重启 SteamVR、重新打开项目一次**。从头显菜单选择“正在运行 → 退出游戏”只是结束当前 Scene 会话；修复后的下一次 Play 应重新创建会话。`Allow Desktop-Only Play Once` 只绕过硬件预检，不会启动 XR，因此不是无画面的修复手段。
+如果当前 Editor 进程曾运行过本修复之前的验证菜单，旧代码可能已建立并关闭过 Background 会话。更新后需 **完整退出 Unity Editor、重启 SteamVR、重新打开项目一次**。从头显菜单选择“正在运行 → 退出游戏”只是结束当前 Scene 会话；修复后的下一次 Play 应重新创建会话。`Allow Desktop-Only Play Once` 只绕过硬件预检，不会启动 XR，因此不是无画面的修复手段。完整启动顺序、日志判据和测试边界见 [OPENVR_LIFECYCLE.md](docs/OPENVR_LIFECYCLE.md)。
 
 ### 按 `P` 后没有真实世界画面
 
