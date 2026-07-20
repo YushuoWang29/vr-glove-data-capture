@@ -16,8 +16,8 @@
 - 使用左右手各一台 **VIVE Tracker 3.0** 提供手部空间定位。
 - 在厂商解算结果上开放手指 **外展/内收（abduction/adduction）**，改善拇指与小指对指能力。
 - 支持可选的 **PIP–DIP 比例耦合**，在传感器数量有限时获得更稳定的指尖姿态。
-- 提供 **手–物体自适应视觉接触**：自由空间保持手套姿态，接触后把将要穿入刚体的可视指骨截停在物体表面；源骨骼、校准、抓取状态和采集数据保持不变。
-- 使用 VIVE Pro 2 前置双摄像头实现实验性的 **stereo video see-through**：在 Unity 2019 Single Pass Instanced 下显式绘制全部双眼切片，并识别 OpenVR 上下双目布局及 SteamVR 的 UV 翻转，避免右眼漏画或左右相机交叉；可按 `O` 仅在各眼图像内部切换 180° 朝向诊断。
+- 提供 **手–物体自然交互**：自由空间保持手套姿态，接触后只截停将要穿入刚体的可视指骨；任务物体增加 Pinch2 自适应松手、短时抓取手碰撞隔离和滤波抛掷速度，源骨骼、校准与采集数据保持不变。
+- 使用 VIVE Pro 2 前置双摄像头实现实验性的 **stereo video see-through**：按 XR 目标投影、逐眼区域和 Valve frame bounds 三个独立阶段处理 UV；支持本机 Multi Pass 与 Unity 2019 Single Pass Instanced 双眼绘制，避免上下倒置、一眼双画面、右眼漏画或左右相机交叉；`O` 只用于逐眼朝向诊断。
 - 使用 Unity Recorder 在 Editor Play Mode 中录制 **VR 第一视角 MP4**。
 - 提供可在 **Scene View 直接编辑**的机器人操作任务场景，包括带实体碰撞桌面的球入桶、杯放定位垫、罐入箱和颜色分类；原厂示例家具也可在本地 `TableScene_Vive` 中直接调整并保存。
 - 将新增任务接入 Hi5 原场景的统一复位消息和实体复位按钮。
@@ -104,7 +104,7 @@ flowchart LR
 |---|---|---|---|
 | **Hi5 手指外展/内收解锁** | Play Mode 自动启用 | 关闭厂商 `finger ADB fixed`，保留手指横向自由度 | [FINGER_KINEMATICS.md](docs/FINGER_KINEMATICS.md) |
 | **PIP–DIP 耦合** | 可选，需要在手骨骼根节点配置组件 | 按比例约束 DIP 屈伸，同时保留其他旋转分量 | [FINGER_KINEMATICS.md](docs/FINGER_KINEMATICS.md) |
-| **手–物体自适应视觉接触** | Play Mode 自动安装到左右可视手 | 手套目标将穿入刚体时，逐指骨贴合表面；不改校准、抓取和采集源 | [HAND_OBJECT_CONTACT.md](docs/HAND_OBJECT_CONTACT.md) |
+| **手–物体自然交互** | Play Mode 自动安装，无需修改 Hi5 prefab | 可视指骨表面贴合；Pinch2 自适应松手；短时碰撞隔离；滤波抛掷速度；不改校准和采集源 | [HAND_OBJECT_CONTACT.md](docs/HAND_OBJECT_CONTACT.md) |
 | **VIVE 双目视频透视** | Play Mode 按 `P` 开关；`O` 仅切换各眼内部 180° 朝向 | 拆分 OpenVR `VerticalStereo` 纹理并结合 UV 翻转选择正确相机，虚拟物体按 Unity 深度绘制在前方 | [MIXED_REALITY.md](docs/MIXED_REALITY.md) |
 | **VR 第一视角录像** | Editor Play Mode 按 `F9` 开始/停止 | `Recordings/vr_view_*.mp4` | [VR_VIEW_RECORDING.md](docs/VR_VIEW_RECORDING.md) |
 | **统一实验数据采集** | `Capture Control` 配置；Play Mode 按 `F12` 启停 trial、`F11` 标记 | `Captures/participants/<ID>/sessions/...` 下的 CSV、事件、manifest、校验和与同步 MP4 | [DATA_CAPTURE.md](docs/DATA_CAPTURE.md) |
@@ -233,7 +233,7 @@ Tools > VR Glove Data Capture > VR Runtime > Validate SteamVR and HMD
 进入 Play Mode 后，项目会自动执行以下扩展：
 
 - 启用手指外展/内收模式。
-- 给左右 Hi5 可视手安装手–物体自适应接触求解器；仅显示层生效。
+- 给左右 Hi5 可视手安装手–物体自适应接触求解器，并为任务物体启用可靠释放、抓取手碰撞隔离和滤波抛掷速度；手部修正仍仅作用于显示层。
 - 在主相机上安装透视组件。
 - 安装 `F9` VR 录像热键。
 - 安装独立于 Scene 的统一采集管理器；任务物体会自动加入物体轨迹，任务成功和复位会自动加入事件流。
@@ -357,7 +357,9 @@ PickPlaceTaskSceneSmokeTests.EditableTaskSceneBindsFiveTasksAndHi5ResetRestoresT
 1. 持久化场景包含实体工作桌、5 个可抓物体和 5 个目标区，全部起始物体的 Collider 均位于桌面范围且不穿桌。
 2. 五项匹配放置均能触发成功。
 3. `messageObjectReset` 能恢复全部任务物体的位置，并恢复启用重力的动态刚体状态。
-4. 刚体线速度与角速度归零，任务进度和目标颜色恢复。
+4. 杯子使用一个根 Rigidbody 和四个中空复合 BoxCollider，杯柄孔没有被碰撞体填满。
+5. 持握时只临时忽略抓取手碰撞，松手速度受控，碰撞在分离或超时后恢复。
+6. 刚体线速度与角速度归零，任务进度和目标颜色恢复。
 
 当前开发版本已经在 Unity `2019.4.18f1` 下通过资源验证和上述 Play Mode 测试。
 
@@ -375,7 +377,7 @@ AdaptiveHandContactSmokeTests.SolverAutoInstallsOnBothVisibleHandsWithoutWriting
 GazeControlPanelSmokeTests.PanelPreservesCalibrationAndRoutesVendorGazeToProjectControls
 ```
 
-该测试验证每次 Play 都能建立有效的运行时面板、原厂校准对象不被删除、`Reconnect` 与 `Interaction` 分居独立槽位且碰撞体不重叠、P-pose 权威完成回调可解锁六个注视控件、原厂手势把菜单切到 `Exit` 后功能面板仍可见、驻留完成可调用透视控制、Single Pass Instanced 采用双实例/全眼切片绘制、VerticalStereo 在负 V 缩放下不交叉双眼，以及重新校准会恢复经过适配的原厂主界面。按 **`Ctrl+Shift+F10`**（Edit Mode）或执行 `Tools > VR Glove Data Capture > Run All Project Play Mode Tests` 可以一次运行注视面板、手–物体接触、pick-and-place 复位和统一采集四项测试。
+该测试验证每次 Play 都能建立有效的运行时面板、原厂校准对象不被删除、`Reconnect` 与 `Interaction` 分居独立槽位且碰撞体不重叠、P-pose 权威完成回调可解锁六个注视控件、原厂手势把菜单切到 `Exit` 后功能面板仍可见、驻留完成可调用透视控制、Single Pass Instanced 采用双实例/全眼切片绘制，以及 VIVE Pro 2 `VerticalStereo` 路径按 **XR 目标投影 → 逐眼区域 → Valve frameBounds** 的次序完成上下方向和双眼隔离修正。按 **`Ctrl+Shift+F10`**（Edit Mode）或执行 `Tools > VR Glove Data Capture > Run All Project Play Mode Tests` 可以一次运行注视面板、手–物体接触、pick-and-place 复位和统一采集四项测试。
 
 统一采集的端到端测试为：
 
@@ -401,7 +403,7 @@ UnifiedCaptureSmokeTests.TrialFinalizesAtomicMachineReadableStreamsAndManifest
 
 ### 按 `P` 后没有真实世界画面
 
-检查 SteamVR 的 Camera 权限并重启 SteamVR。`Passthrough is ready` 只表示组件安装完成，只有 `Passthrough Streaming: LIVE` 才表示收到了连续图像。VIVE Pro 2 的正常日志还应包含 `2 camera(s), VerticalStereo`、`per-eye Normal`、实际 UV 变换及 **`XR draw SinglePassInstanced x2/all-slices`**；左右眼应各显示同侧相机的一个现实背景，而不是左眼显示上下两幅图、右眼仍为纯虚拟场景。若两眼身份正确但画面均确实倒置，可按 `O` 切换各眼内部 180°；该操作不能修复接缝或未标定视差。
+检查 SteamVR 的 Camera 权限并重启 SteamVR。`Passthrough is ready` 只表示组件安装完成，只有 `Passthrough Streaming: LIVE` 才表示收到了连续图像。VIVE Pro 2 的正常日志还应包含 `2 camera(s), VerticalStereo`、`per-eye Normal`、实际 UV 变换，以及当前项目配置对应的 **`XR draw SinglePassInstanced x2/all-slices`**；该值必须与 OpenVR 初始化日志一致。左右眼应各显示同侧相机的一个直立现实背景，而不是左眼显示上下两幅图、右眼仍为纯虚拟场景。`O` 仅用于临时诊断每眼内部朝向，不能修复双眼接缝、相机内外参或深度视差，正常验收必须回到 `per-eye Normal`。完整技术依据与实机检查表见 [MIXED_REALITY.md](docs/MIXED_REALITY.md)。
 
 ### 点击 Play 三角退出时 Unity Editor 整体崩溃
 

@@ -3,6 +3,7 @@ using System.Collections;
 using System.Collections.Generic;
 using System.Reflection;
 using UnityEngine;
+using VRGloveDataCapture.RoboticsTasks;
 
 namespace VRGloveDataCapture.HandInteraction
 {
@@ -565,6 +566,17 @@ namespace VRGloveDataCapture.HandInteraction
             if (requireRigidbody && body == null)
             {
                 return false;
+            }
+
+            // Hi5 reparents a held task object below the visible palm. The
+            // Rigidbody marker is therefore checked before hand ancestry so a
+            // held object remains a visual surface candidate. This exception
+            // is deliberately narrow: late-created hand colliders are still
+            // rejected by the normal ancestry check below.
+            if (body != null &&
+                body.GetComponent<PickPlaceTaskObject>() != null)
+            {
+                return true;
             }
 
             if (body != null &&

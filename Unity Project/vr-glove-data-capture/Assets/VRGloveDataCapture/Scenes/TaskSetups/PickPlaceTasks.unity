@@ -586,6 +586,94 @@ Transform:
   m_Father: {fileID: 130279122}
   m_RootOrder: 0
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!1 &172316570
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 172316571}
+  - component: {fileID: 172316572}
+  m_Layer: 11
+  m_Name: Mug_Handle_Collider_Outer
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &172316571
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 172316570}
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: -0.0408612, y: 0.017339502, z: 0.0401195}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_Children: []
+  m_Father: {fileID: 1093488711}
+  m_RootOrder: 1
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!65 &172316572
+BoxCollider:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 172316570}
+  m_Material: {fileID: 0}
+  m_IsTrigger: 0
+  m_Enabled: 1
+  serializedVersion: 2
+  m_Size: {x: 0.01403808, y: 0.029801918, z: 0.0406515}
+  m_Center: {x: 0, y: 0, z: 0}
+--- !u!1 &185765509
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 185765510}
+  - component: {fileID: 185765511}
+  m_Layer: 11
+  m_Name: Mug_Handle_Collider_Bottom
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &185765510
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 185765509}
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: -0.03136024, y: 0.017339502, z: 0.019793749}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_Children: []
+  m_Father: {fileID: 1093488711}
+  m_RootOrder: 2
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!65 &185765511
+BoxCollider:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 185765509}
+  m_Material: {fileID: 0}
+  m_IsTrigger: 0
+  m_Enabled: 1
+  serializedVersion: 2
+  m_Size: {x: 0.028828574, y: 0.029801918, z: 0.01219545}
+  m_Center: {x: 0, y: 0, z: 0}
 --- !u!1 &254490102
 GameObject:
   m_ObjectHideFlags: 0
@@ -1154,6 +1242,15 @@ MonoBehaviour:
   taskId: can_to_bin
   hi5ObjectId: -1003
   hi5ObjectName: YCB_TomatoSoupCan
+  pinch2OpeningDistance: 0.018
+  pinch2MinimumReleaseSeparation: 0.045
+  pinch2MaximumReleaseSeparation: 0.065
+  pinch2ReleaseSustainTime: 0.06
+  velocitySampleResponseHz: 12
+  maximumReleaseLinearSpeed: 3.5
+  maximumReleaseAngularSpeed: 18
+  releasedHandCollisionGrace: 0.12
+  releasedHandCollisionTimeout: 0.35
 --- !u!54 &635058554
 Rigidbody:
   m_ObjectHideFlags: 0
@@ -1281,6 +1378,15 @@ MonoBehaviour:
   taskId: red_block_to_red_bin
   hi5ObjectId: -1004
   hi5ObjectName: Red_Sorting_Block
+  pinch2OpeningDistance: 0.018
+  pinch2MinimumReleaseSeparation: 0.045
+  pinch2MaximumReleaseSeparation: 0.065
+  pinch2ReleaseSustainTime: 0.06
+  velocitySampleResponseHz: 12
+  maximumReleaseLinearSpeed: 3.5
+  maximumReleaseAngularSpeed: 18
+  releasedHandCollisionGrace: 0.12
+  releasedHandCollisionTimeout: 0.35
 --- !u!54 &642140858
 Rigidbody:
   m_ObjectHideFlags: 0
@@ -2299,6 +2405,50 @@ MeshFilter:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 1059162015}
   m_Mesh: {fileID: 10202, guid: 0000000000000000e000000000000000, type: 0}
+--- !u!1 &1066273275
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 1066273276}
+  - component: {fileID: 1066273277}
+  m_Layer: 11
+  m_Name: Mug_Handle_Collider_Top
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &1066273276
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1066273275}
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: -0.03136024, y: 0.017339502, z: 0.06044525}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_Children: []
+  m_Father: {fileID: 1093488711}
+  m_RootOrder: 0
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!65 &1066273277
+BoxCollider:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1066273275}
+  m_Material: {fileID: 0}
+  m_IsTrigger: 0
+  m_Enabled: 1
+  serializedVersion: 2
+  m_Size: {x: 0.028828574, y: 0.029801918, z: 0.01219545}
+  m_Center: {x: 0, y: 0, z: 0}
 --- !u!1 &1093488710
 GameObject:
   m_ObjectHideFlags: 0
@@ -2310,9 +2460,9 @@ GameObject:
   - component: {fileID: 1093488711}
   - component: {fileID: 1093488716}
   - component: {fileID: 1093488715}
-  - component: {fileID: 1093488714}
   - component: {fileID: 1093488713}
   - component: {fileID: 1093488712}
+  - component: {fileID: 1093488714}
   m_Layer: 11
   m_Name: YCB_Mug
   m_TagString: Untagged
@@ -2330,7 +2480,10 @@ Transform:
   m_LocalRotation: {x: -0.7071068, y: -0, z: -0, w: 0.7071068}
   m_LocalPosition: {x: -0.19000001, y: 0.7000927, z: 0.58}
   m_LocalScale: {x: 1.0001367, y: 1.0001367, z: 1.0001367}
-  m_Children: []
+  m_Children:
+  - {fileID: 1066273276}
+  - {fileID: 172316571}
+  - {fileID: 185765510}
   m_Father: {fileID: 121015930}
   m_RootOrder: 5
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
@@ -2349,6 +2502,15 @@ MonoBehaviour:
   taskId: mug_to_coaster
   hi5ObjectId: -1002
   hi5ObjectName: YCB_Mug
+  pinch2OpeningDistance: 0.018
+  pinch2MinimumReleaseSeparation: 0.045
+  pinch2MaximumReleaseSeparation: 0.065
+  pinch2ReleaseSustainTime: 0.06
+  velocitySampleResponseHz: 12
+  maximumReleaseLinearSpeed: 3.5
+  maximumReleaseAngularSpeed: 18
+  releasedHandCollisionGrace: 0.12
+  releasedHandCollisionTimeout: 0.35
 --- !u!54 &1093488713
 Rigidbody:
   m_ObjectHideFlags: 0
@@ -2376,8 +2538,8 @@ BoxCollider:
   m_IsTrigger: 0
   m_Enabled: 1
   serializedVersion: 2
-  m_Size: {x: 0.10996496, y: 0.08754314, z: 0.07642482}
-  m_Center: {x: 0.008857001, y: 0.017339502, z: 0.0401195}
+  m_Size: {x: 0.08195528, y: 0.08195528, z: 0.07642482}
+  m_Center: {x: 0.021107085, y: 0.017339502, z: 0.03930647}
 --- !u!23 &1093488715
 MeshRenderer:
   m_ObjectHideFlags: 0
@@ -3935,6 +4097,15 @@ MonoBehaviour:
   taskId: ball_to_bucket
   hi5ObjectId: -1001
   hi5ObjectName: YCB_Baseball
+  pinch2OpeningDistance: 0.018
+  pinch2MinimumReleaseSeparation: 0.045
+  pinch2MaximumReleaseSeparation: 0.065
+  pinch2ReleaseSustainTime: 0.06
+  velocitySampleResponseHz: 12
+  maximumReleaseLinearSpeed: 3.5
+  maximumReleaseAngularSpeed: 18
+  releasedHandCollisionGrace: 0.12
+  releasedHandCollisionTimeout: 0.35
 --- !u!54 &1877465921
 Rigidbody:
   m_ObjectHideFlags: 0
@@ -4340,6 +4511,15 @@ MonoBehaviour:
   taskId: blue_block_to_blue_bin
   hi5ObjectId: -1005
   hi5ObjectName: Blue_Sorting_Block
+  pinch2OpeningDistance: 0.018
+  pinch2MinimumReleaseSeparation: 0.045
+  pinch2MaximumReleaseSeparation: 0.065
+  pinch2ReleaseSustainTime: 0.06
+  velocitySampleResponseHz: 12
+  maximumReleaseLinearSpeed: 3.5
+  maximumReleaseAngularSpeed: 18
+  releasedHandCollisionGrace: 0.12
+  releasedHandCollisionTimeout: 0.35
 --- !u!54 &2127525991
 Rigidbody:
   m_ObjectHideFlags: 0

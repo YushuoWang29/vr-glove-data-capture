@@ -98,7 +98,9 @@ namespace VRGloveDataCapture.MixedReality
         private StereoFrameLayout detectedLayout = StereoFrameLayout.Mono;
         private Vector4 currentUvTransform = new Vector4(1.0f, -1.0f, 0.0f, 1.0f);
         private bool singlePassInstancedBackground;
-        private string stereoDrawMode = "Standard";
+        private bool hasConfiguredStereoMode;
+        private XRSettings.StereoRenderingMode configuredStereoMode;
+        private string stereoDrawMode = "Pending XR initialization";
         private PassthroughState state = PassthroughState.Disabled;
         private string status = "Passthrough is disabled.";
 
@@ -168,7 +170,6 @@ namespace VRGloveDataCapture.MixedReality
             {
                 name = CommandBufferName
             };
-            ConfigureBackgroundCommands();
         }
 
         private void OnEnable()
@@ -248,6 +249,7 @@ namespace VRGloveDataCapture.MixedReality
                 RotateEachEye180Id,
                 perEyeOrientation == PerEyeOrientation.Rotate180 ? 1.0f : 0.0f);
             UpdateTextureBounds();
+            RefreshBackgroundCommandsForCurrentStereoMode();
             ApplyCameraOverride();
             InstallBackgroundCommands();
 
@@ -503,6 +505,44 @@ namespace VRGloveDataCapture.MixedReality
             return orientedUv;
         }
 
+        /// <summary>
+        /// CPU reference for the complete shader UV path. The XR render target
+        /// projection correction and Valve tracked-camera frame bounds are two
+        /// independent transforms and must be applied in this order. The
+        /// projection sign mirrors Unity's _ProjectionParams.x contract: +1 for
+        /// a normal projection and -1 for a vertically flipped projection.
+        /// </summary>
+        public static Vector2 CalculateCameraSampleUv(
+            Vector2 quadUv,
+            int renderEyeIndex,
+            StereoFrameLayout layout,
+            bool swapEyes,
+            PerEyeOrientation orientation,
+            Vector4 frameBoundsTransform,
+            float projectionFlipSign)
+        {
+            // This is the screen/target correction which Unity would normally
+            // contribute through its projection matrix. The passthrough shader
+            // emits clip-space vertices directly, so it must be explicit here.
+            Vector2 viewUv = new Vector2(
+                quadUv.x,
+                0.5f + (quadUv.y - 0.5f) * projectionFlipSign);
+
+            // Eye-region selection is performed in logical view UVs. Valve's
+            // bounds transform remains last because it describes the external
+            // tracked-camera texture, including its independent vertical flip.
+            Vector2 layoutUv = CalculateStereoLayoutUv(
+                viewUv,
+                renderEyeIndex,
+                layout,
+                swapEyes,
+                orientation,
+                new Vector2(frameBoundsTransform.x, frameBoundsTransform.y));
+            return new Vector2(
+                layoutUv.x * frameBoundsTransform.x + frameBoundsTransform.z,
+                layoutUv.y * frameBoundsTransform.y + frameBoundsTransform.w);
+        }
+
         private static string FormatUvTransform(Vector4 transform)
         {
             return "(" + transform.x.ToString("F4") + "," +
@@ -516,7 +556,33 @@ namespace VRGloveDataCapture.MixedReality
         /// texture-array slice. Single Pass Instanced therefore needs both the
         /// complete CameraTarget array and two draw instances explicitly.
         /// </summary>
-        private void ConfigureBackgroundCommands()
+        private void RefreshBackgroundCommandsForCurrentStereoMode()
+        {
+            XRSettings.StereoRenderingMode currentMode = XRSettings.stereoRenderingMode;
+            if (hasConfiguredStereoMode && configuredStereoMode == currentMode)
+            {
+                return;
+            }
+
+            // XRSettings reports its final OpenVR mode only after the loader has
+            // initialized. Awake is too early: caching MultiPass there while the
+            // project later starts Single Pass Instanced leaves the right texture
+            // array slice undrawn. Rebuild immediately before first install and
+            // again if the runtime mode changes.
+            bool reinstall = commandsInstalled;
+            if (reinstall)
+            {
+                RemoveBackgroundCommands();
+            }
+
+            ConfigureBackgroundCommands(currentMode);
+            if (reinstall)
+            {
+                InstallBackgroundCommands();
+            }
+        }
+
+        private void ConfigureBackgroundCommands(XRSettings.StereoRenderingMode mode)
         {
             if (backgroundCommands == null || fullscreenMesh == null || backgroundMaterial == null)
             {
@@ -524,7 +590,8 @@ namespace VRGloveDataCapture.MixedReality
             }
 
             backgroundCommands.Clear();
-            XRSettings.StereoRenderingMode mode = XRSettings.stereoRenderingMode;
+            configuredStereoMode = mode;
+            hasConfiguredStereoMode = true;
             singlePassInstancedBackground = RequiresInstancedStereoDraw(mode);
             stereoDrawMode = mode.ToString() +
                 (singlePassInstancedBackground ? " x2/all-slices" : " x1");

@@ -47,7 +47,7 @@ Assets/Hi5_Interaction_SDK/Scenes/Vive/TableScene_Vive.unity
 
 如果只打开原厂 `TableScene_Vive`，项目**不会再在 Play Mode 临时生成第二套任务布局**。所有 pick-and-place 内容只由项目自有 `PickPlaceTasks` 持久化场景提供，从源头避免可见模型与实际被抓物体分属两套实例而产生“残影/隔空抓取”。
 
-每个任务物体使用**单一根对象**：`MeshFilter`、`Renderer`、非 Trigger `Collider`、`Rigidbody`、`PickPlaceTaskObject` 与运行时 Hi5 simple-object 组件都位于同一 GameObject。场景中不保留悬浮任务文字、蓝色起始垫或额外 `YCB_Visual` 子对象。
+每个任务物体使用**单一物理根对象**：`MeshFilter`、`Renderer`、唯一 `Rigidbody`、`PickPlaceTaskObject` 与运行时 Hi5 simple-object 组件都位于根 GameObject。简单物体直接在根节点使用 primitive Collider；杯子等有孔物体允许添加只含 primitive Collider 的子节点，所有子碰撞体仍归同一个根刚体求解。场景中不保留悬浮任务文字、蓝色起始垫或额外 `YCB_Visual` 渲染子对象。
 
 任务场景自带 `Task_Worktable`：桌面中心约为 `(0.08, 0.65, 0.70)`，尺寸为 `1.80 × 0.08 × 0.72 m`，可操作表面高度为 `0.69 m`；桌面和四条桌腿均使用实体 Collider 与 `Hi5Plane` 层。任务物体按其**实际世界空间 Collider 下边界**落在桌面上方 `12 mm`，避免未激活对象的空 `bounds` 导致开场穿桌或自由落体。
 
@@ -98,6 +98,16 @@ Assets/Hi5_Interaction_SDK/Scenes/Vive/TableScene_Vive.unity
 | `PickPlaceTaskObject` | 填写唯一 `Task Id`、`Hi5 Object Id`、`Hi5 Object Name` | 运行时注册、目标匹配和复位 |
 
 项目当前占用 Hi5 对象 ID `-1001` 至 `-1005`。新增对象应使用不重复的负数 ID，并为其设置与目标区完全一致的 `Task Id`。
+
+任务物体默认只启用 Hi5 的 `Pinch` 与 `PinchInHand`，不启用可能重复绑定同一对象的 `Clap`/`Lift`。持握期间，项目仅临时忽略物体与当前抓取手之间的碰撞；松手时把滤波后的线速度和角速度交回刚体，并在物体与手分离后恢复碰撞。Pinch2 的兼容释放阈值按抓住时的指尖间距自适应，解决旧版 Hi5 状态机张开后未发送 unpinch 消息造成的“吸在手上”。详细机制与数据隔离见 [HAND_OBJECT_CONTACT.md](HAND_OBJECT_CONTACT.md)。
+
+`YCB_Mug` 使用杯身一个、杯柄三个 BoxCollider 组成中空复合碰撞体。日常移动、旋转和缩放杯子不会破坏该结构；如果替换了杯子 mesh，可执行：
+
+```text
+Tools > VR Glove Data Capture > Task Setups > Update YCB Mug Compound Colliders
+```
+
+该维护命令只替换杯子的 Collider 并保存任务 Scene，**不会重建任务区，也不会覆盖用户调整过的根对象位置、旋转、缩放或其他物体布局**。
 
 ### 增加一个目标区
 
@@ -168,7 +178,7 @@ PickPlaceTaskSceneSmokeTests.EditableTaskSceneBindsFiveTasksAndHi5ResetRestoresT
 
 在 Edit Mode 下按 `Ctrl+Shift+F7`，或执行 `Tools > VR Glove Data Capture > Task Setups > Run Pick Place Play Mode Test`，即可单独运行该回归测试。Console 汇总 `passed=1, failed=0, skipped=0` 表示通过。
 
-测试先加载原厂场景，使 Hi5 manager 就绪，再以 Additive 模式加载持久化任务场景，并验证：没有悬浮文字、起始垫或重复渲染子对象；实体工作桌、四条桌腿及其碰撞层正确；5 个对象均处于桌面投影范围且实际 Collider 下边界不穿桌；5 个对象 ID 唯一且完成 Hi5 绑定；全部对象具备动态重力和实体 Collider；马克杯保存的初始姿态直立；5 个目标判据全部触发；`messageObjectReset` 恢复位置、动态刚体状态、速度、任务进度和目标颜色。原厂示例区位置是用户本机配置，自动测试不再断言固定坐标。未安装本地 Hi5 Interaction SDK 时测试标记为忽略。
+测试先加载原厂场景，使 Hi5 manager 就绪，再以 Additive 模式加载持久化任务场景，并验证：没有悬浮文字、起始垫或重复渲染子对象；实体工作桌、四条桌腿及其碰撞层正确；5 个对象均处于桌面投影范围且实际 Collider 下边界不穿桌；5 个对象 ID 唯一且完成 Hi5 绑定；全部对象具备动态重力和实体 Collider；马克杯保存的初始姿态直立且杯柄复合碰撞体中空；持握碰撞抑制、释放速度和延迟恢复符合约束；5 个目标判据全部触发；`messageObjectReset` 恢复位置、动态刚体状态、速度、任务进度和目标颜色。原厂示例区位置是用户本机配置，自动测试不再断言固定坐标。未安装本地 Hi5 Interaction SDK 时测试标记为忽略。
 
 ### 实机检查
 

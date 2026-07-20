@@ -54,7 +54,16 @@ Shader "Hidden/VRGloveDataCapture/PassthroughBackground"
                 // pass at the camera's pre-opaque event makes the tracked camera
                 // the background, so normal Unity depth rendering remains intact.
                 output.vertex = float4(input.vertex.xy, 1.0, 1.0);
-                output.uv = input.uv;
+
+                // A D3D XR eye target can use a vertically flipped projection.
+                // Since this pass writes clip space directly, Unity's projection
+                // matrix cannot perform that correction for us. _ProjectionParams.x
+                // is Unity's authoritative +1/-1 signal for the current camera.
+                // Keep this view-target correction separate from Valve's later
+                // frameBounds transform, which describes the external texture.
+                output.uv = float2(
+                    input.uv.x,
+                    0.5 + (input.uv.y - 0.5) * _ProjectionParams.x);
                 return output;
             }
 

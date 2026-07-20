@@ -8,6 +8,7 @@ using UnityEngine;
 using UnityEngine.SceneManagement;
 using UnityEngine.TestTools;
 using VRGloveDataCapture.HandInteraction;
+using VRGloveDataCapture.RoboticsTasks;
 
 namespace VRGloveDataCapture.Tests
 {
@@ -103,6 +104,34 @@ namespace VRGloveDataCapture.Tests
                 controllers[0],
                 sourceBonesField,
                 lateUpdateMethod);
+            VerifyHeldTaskColliderRemainsAContactCandidate(controllers[0]);
+        }
+
+        private static void VerifyHeldTaskColliderRemainsAContactCandidate(
+            AdaptiveHandContactController controller)
+        {
+            MethodInfo candidateMethod = typeof(AdaptiveHandContactController).GetMethod(
+                "IsCandidateCollider",
+                BindingFlags.NonPublic | BindingFlags.Instance);
+            Assert.IsNotNull(candidateMethod);
+
+            GameObject heldProbe = new GameObject("HeldTaskContactCandidateProbe");
+            heldProbe.transform.SetParent(controller.VisualRigRoot, false);
+            heldProbe.transform.localPosition = Vector3.zero;
+            SphereCollider collider = heldProbe.AddComponent<SphereCollider>();
+            collider.radius = 0.025f;
+            Rigidbody body = heldProbe.AddComponent<Rigidbody>();
+            body.isKinematic = true;
+            heldProbe.AddComponent<PickPlaceTaskObject>();
+
+            bool isCandidate = (bool)candidateMethod.Invoke(
+                controller,
+                new object[] { collider });
+            Assert.IsTrue(
+                isCandidate,
+                "A task Rigidbody parented below the Hi5 palm was misclassified as a hand collider.");
+
+            UnityEngine.Object.Destroy(heldProbe);
         }
 
         private static void VerifyVisibleFingerStopsAtProbeWithoutChangingGlovePose(

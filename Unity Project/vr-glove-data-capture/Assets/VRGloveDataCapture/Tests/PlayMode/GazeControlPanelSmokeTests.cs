@@ -309,8 +309,17 @@ namespace VRGloveDataCapture.Tests
                 "Hidden/VRGloveDataCapture/PassthroughBackground",
                 backgroundMaterial.shader.name,
                 "Passthrough is still using the one-eye post-processing shader.");
+            Assert.AreEqual("Normal", passthrough.CurrentPerEyeOrientation,
+                "Per-eye rotation must remain a diagnostic override, not the default correction.");
 
-            Texture2D syntheticStereoFrame = new Texture2D(16, 32, TextureFormat.RGBA32, false);
+            // These are the dimensions reported by the connected VIVE Pro 2 in
+            // Editor.log. Keeping the real aspect ratio here protects the
+            // VerticalStereo fallback when a driver omits its layout property.
+            Texture2D syntheticStereoFrame = new Texture2D(
+                1224,
+                1840,
+                TextureFormat.RGBA32,
+                false);
             MethodInfo detectFrameLayout = typeof(SteamVrPassthroughEffect).GetMethod(
                 "DetectFrameLayout",
                 BindingFlags.NonPublic | BindingFlags.Instance);
@@ -351,6 +360,60 @@ namespace VRGloveDataCapture.Tests
                 "Per-eye rotation exchanged the two camera regions.");
             Assert.LessOrEqual(rotatedLeft.y, 1.0f,
                 "Per-eye rotation escaped the left camera region.");
+
+            // Real VIVE Pro 2 evidence from Editor.log is D3D11,
+            // VerticalStereo and Valve frame bounds (1,-1,0,1). D3D eye targets
+            // use a flipped projection, independently of the external texture
+            // flip already encoded by Valve's negative V frame bound. Stereo
+            // draw mode is tested separately because OpenVR finalizes it later.
+            Vector4 viveFrameBounds = new Vector4(1.0f, -1.0f, 0.0f, 1.0f);
+
+            // First prove that the render-target projection correction exists
+            // independently of the Valve source-texture transform.
+            Vector2 projectionOnly = SteamVrPassthroughEffect.CalculateCameraSampleUv(
+                new Vector2(0.25f, 0.0f), 0,
+                SteamVrPassthroughEffect.StereoFrameLayout.Mono,
+                false, SteamVrPassthroughEffect.PerEyeOrientation.Normal,
+                new Vector4(1.0f, 1.0f, 0.0f, 0.0f), -1.0f);
+            Assert.That(projectionOnly.x, Is.EqualTo(0.25f).Within(0.0001f),
+                "Projection correction mirrored the passthrough image horizontally.");
+            Assert.That(projectionOnly.y, Is.EqualTo(1.0f).Within(0.0001f),
+                "The XR render-target projection flip was not applied independently.");
+
+            // Then exercise the complete, ordered VIVE Pro 2 path:
+            // target projection -> logical stereo region -> Valve frame bounds.
+            Vector2 leftTop = SteamVrPassthroughEffect.CalculateCameraSampleUv(
+                new Vector2(0.25f, 0.0f), 0,
+                SteamVrPassthroughEffect.StereoFrameLayout.VerticalStereo,
+                false, SteamVrPassthroughEffect.PerEyeOrientation.Normal,
+                viveFrameBounds, -1.0f);
+            Vector2 leftBottom = SteamVrPassthroughEffect.CalculateCameraSampleUv(
+                new Vector2(0.25f, 1.0f), 0,
+                SteamVrPassthroughEffect.StereoFrameLayout.VerticalStereo,
+                false, SteamVrPassthroughEffect.PerEyeOrientation.Normal,
+                viveFrameBounds, -1.0f);
+            Vector2 rightTop = SteamVrPassthroughEffect.CalculateCameraSampleUv(
+                new Vector2(0.75f, 0.0f), 1,
+                SteamVrPassthroughEffect.StereoFrameLayout.VerticalStereo,
+                false, SteamVrPassthroughEffect.PerEyeOrientation.Normal,
+                viveFrameBounds, -1.0f);
+            Vector2 rightBottom = SteamVrPassthroughEffect.CalculateCameraSampleUv(
+                new Vector2(0.75f, 1.0f), 1,
+                SteamVrPassthroughEffect.StereoFrameLayout.VerticalStereo,
+                false, SteamVrPassthroughEffect.PerEyeOrientation.Normal,
+                viveFrameBounds, -1.0f);
+            Assert.That(leftTop.y, Is.EqualTo(0.0f).Within(0.0001f),
+                "The left-eye image top is not mapped to the top of camera zero.");
+            Assert.That(leftBottom.y, Is.EqualTo(0.5f).Within(0.0001f),
+                "The left-eye image bottom escaped camera zero's packed region.");
+            Assert.That(rightTop.y, Is.EqualTo(0.5f).Within(0.0001f),
+                "The right-eye image top is not mapped to the top of camera one.");
+            Assert.That(rightBottom.y, Is.EqualTo(1.0f).Within(0.0001f),
+                "The right-eye image bottom escaped camera one's packed region.");
+            Assert.That(leftTop.x, Is.EqualTo(0.25f).Within(0.0001f));
+            Assert.That(leftBottom.x, Is.EqualTo(0.25f).Within(0.0001f));
+            Assert.That(rightTop.x, Is.EqualTo(0.75f).Within(0.0001f));
+            Assert.That(rightBottom.x, Is.EqualTo(0.75f).Within(0.0001f));
             Assert.IsTrue(
                 SteamVrPassthroughEffect.RequiresInstancedStereoDraw(
                     UnityEngine.XR.XRSettings.StereoRenderingMode.SinglePassInstanced),
@@ -359,6 +422,35 @@ namespace VRGloveDataCapture.Tests
                 SteamVrPassthroughEffect.RequiresInstancedStereoDraw(
                     UnityEngine.XR.XRSettings.StereoRenderingMode.MultiPass),
                 "Multi Pass must not receive a doubled background draw.");
+
+            // Awake runs before the OpenVR loader settles on its configured XR
+            // rendering mode. Verify the command buffer can be rebuilt after
+            // that transition instead of permanently retaining an early x1 draw.
+            MethodInfo configureBackground = typeof(SteamVrPassthroughEffect).GetMethod(
+                "ConfigureBackgroundCommands",
+                BindingFlags.NonPublic | BindingFlags.Instance);
+            Assert.IsNotNull(configureBackground);
+            configureBackground.Invoke(
+                passthrough,
+                new object[] { UnityEngine.XR.XRSettings.StereoRenderingMode.MultiPass });
+            Assert.AreEqual("MultiPass x1", passthrough.CurrentStereoDrawMode);
+            configureBackground.Invoke(
+                passthrough,
+                new object[] { UnityEngine.XR.XRSettings.StereoRenderingMode.SinglePassInstanced });
+            Assert.AreEqual(
+                "SinglePassInstanced x2/all-slices",
+                passthrough.CurrentStereoDrawMode,
+                "A late OpenVR SPI initialization did not rebuild the background draw for both eyes.");
+
+            MethodInfo refreshBackground = typeof(SteamVrPassthroughEffect).GetMethod(
+                "RefreshBackgroundCommandsForCurrentStereoMode",
+                BindingFlags.NonPublic | BindingFlags.Instance);
+            Assert.IsNotNull(refreshBackground);
+            refreshBackground.Invoke(passthrough, null);
+            StringAssert.StartsWith(
+                UnityEngine.XR.XRSettings.stereoRenderingMode.ToString(),
+                passthrough.CurrentStereoDrawMode,
+                "The cached passthrough draw no longer matches Unity's live XR mode.");
 
             Assert.IsNotNull(
                 FindType("VRGloveDataCapture.EditorTools.Hi5EditorPlayModeShutdownGuard"),

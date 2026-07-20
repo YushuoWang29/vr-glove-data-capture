@@ -146,6 +146,7 @@ namespace VRGloveDataCapture.Tests
             Quaternion mugStartRotation = (Quaternion)capturedStartRotationField.GetValue(mug);
             Assert.Less(Quaternion.Angle(mugStartRotation, Quaternion.Euler(-90f, 0f, 0f)), 0.1f,
                 "The mug's authored start pose is not in its upright model orientation.");
+            AssertMugUsesOneRigidbodyAndOpenHandleCompoundCollider(mug);
 
             Type visiblePalmType = FindType("Hi5_Interaction_Core.Hi5_Hand_Palm");
             Component visiblePalm = visiblePalmType == null
@@ -155,16 +156,72 @@ namespace VRGloveDataCapture.Tests
             PickPlaceTaskObject holdPhysicsProbe = taskObjects[0];
             Transform releasedParent = holdPhysicsProbe.transform.parent;
             Rigidbody holdPhysicsBody = holdPhysicsProbe.GetComponent<Rigidbody>();
+            FieldInfo ignoredCollisionPairsField = typeof(PickPlaceTaskObject).GetField(
+                "ignoredHandCollisions",
+                BindingFlags.NonPublic | BindingFlags.Instance);
+            FieldInfo maximumLinearSpeedField = typeof(PickPlaceTaskObject).GetField(
+                "maximumReleaseLinearSpeed",
+                BindingFlags.NonPublic | BindingFlags.Instance);
+            FieldInfo maximumAngularSpeedField = typeof(PickPlaceTaskObject).GetField(
+                "maximumReleaseAngularSpeed",
+                BindingFlags.NonPublic | BindingFlags.Instance);
+            Assert.IsNotNull(ignoredCollisionPairsField);
+            Assert.IsNotNull(maximumLinearSpeedField);
+            Assert.IsNotNull(maximumAngularSpeedField);
+
             holdPhysicsProbe.transform.SetParent(visiblePalm.transform, true);
             yield return new WaitForFixedUpdate();
             Assert.IsTrue(holdPhysicsBody.isKinematic,
                 "A task object parented to the Hi5 palm must be kinematic while held.");
+
+            IList ignoredCollisionPairs =
+                (IList)ignoredCollisionPairsField.GetValue(holdPhysicsProbe);
+            Assert.Greater(
+                ignoredCollisionPairs.Count,
+                0,
+                "A held task object did not suppress collisions against its grabbing hand.");
+
+            for (int sample = 0; sample < 4; sample++)
+            {
+                holdPhysicsProbe.transform.position += new Vector3(0.012f, 0.0f, 0.0f);
+                holdPhysicsProbe.transform.rotation =
+                    Quaternion.AngleAxis(7.0f, Vector3.up) * holdPhysicsProbe.transform.rotation;
+                yield return null;
+            }
+
             holdPhysicsProbe.transform.SetParent(releasedParent, true);
-            yield return new WaitForFixedUpdate();
             Assert.IsFalse(holdPhysicsBody.isKinematic,
                 "A task object released from the Hi5 palm must return to dynamic physics.");
             Assert.IsTrue(holdPhysicsBody.useGravity,
                 "A task object released from the Hi5 palm must retain gravity.");
+            Assert.Greater(
+                holdPhysicsBody.velocity.magnitude,
+                0.01f,
+                "A released task object did not inherit the sampled hand motion.");
+            Assert.Greater(
+                holdPhysicsBody.angularVelocity.magnitude,
+                0.01f,
+                "A released task object did not inherit the sampled hand rotation.");
+            Assert.LessOrEqual(
+                holdPhysicsBody.velocity.magnitude,
+                (float)maximumLinearSpeedField.GetValue(holdPhysicsProbe) + 0.001f,
+                "Inherited task-object velocity exceeded its safety limit.");
+            Assert.LessOrEqual(
+                holdPhysicsBody.angularVelocity.magnitude,
+                (float)maximumAngularSpeedField.GetValue(holdPhysicsProbe) + 0.001f,
+                "Inherited task-object angular velocity exceeded its safety limit.");
+
+            Assert.Greater(
+                ignoredCollisionPairs.Count,
+                0,
+                "Hand collisions were restored before the release grace period elapsed.");
+            holdPhysicsProbe.transform.position += Vector3.one * 0.5f;
+            Physics.SyncTransforms();
+            yield return new WaitForSecondsRealtime(0.16f);
+            Assert.AreEqual(
+                0,
+                ignoredCollisionPairs.Count,
+                "Hand collisions were not restored after the object separated from the hand.");
 
             FieldInfo zoneTaskIdField = typeof(PickPlaceTargetZone).GetField(
                 "taskId",
@@ -238,6 +295,91 @@ namespace VRGloveDataCapture.Tests
                     entry.Key.name + " did not restore its ready color.");
             }
 
+        }
+
+        private static void AssertMugUsesOneRigidbodyAndOpenHandleCompoundCollider(
+            PickPlaceTaskObject mug)
+        {
+            Rigidbody rootBody = mug.GetComponent<Rigidbody>();
+            Rigidbody[] rigidbodies = mug.GetComponentsInChildren<Rigidbody>(true);
+            Assert.IsNotNull(rootBody, "YCB_Mug has no root Rigidbody.");
+            Assert.AreEqual(1, rigidbodies.Length,
+                "YCB_Mug compound colliders must share one root Rigidbody.");
+            Assert.AreSame(rootBody, rigidbodies[0],
+                "YCB_Mug has a child Rigidbody that splits its compound collider.");
+
+            Collider[] colliders = mug.GetComponentsInChildren<Collider>(true);
+            Assert.AreEqual(4, colliders.Length,
+                "YCB_Mug must have one body primitive and three handle primitives.");
+            Assert.IsNull(mug.GetComponentInChildren<MeshCollider>(true),
+                "YCB_Mug must not use a convex or non-convex MeshCollider.");
+            for (int index = 0; index < colliders.Length; index++)
+            {
+                Assert.IsInstanceOf<BoxCollider>(colliders[index],
+                    "Every YCB_Mug collision shape must be a primitive BoxCollider.");
+                Assert.IsFalse(colliders[index].isTrigger,
+                    "YCB_Mug physical colliders must not be triggers.");
+                Assert.AreSame(rootBody, colliders[index].attachedRigidbody,
+                    "A YCB_Mug collider is not owned by the single root Rigidbody.");
+            }
+
+            BoxCollider bodyCollider = mug.GetComponent<BoxCollider>();
+            Assert.IsNotNull(bodyCollider,
+                "YCB_Mug must keep its body primitive on the physics root for Hi5 interaction.");
+
+            BoxCollider topHandle = RequireHandleCollider(
+                mug.transform,
+                PickPlaceTaskLayout.MugHandleTopColliderName);
+            BoxCollider outerHandle = RequireHandleCollider(
+                mug.transform,
+                PickPlaceTaskLayout.MugHandleOuterColliderName);
+            BoxCollider bottomHandle = RequireHandleCollider(
+                mug.transform,
+                PickPlaceTaskLayout.MugHandleBottomColliderName);
+
+            float bodyMinX = bodyCollider.center.x - bodyCollider.size.x * 0.5f;
+            float outerMaxX = outerHandle.transform.localPosition.x +
+                outerHandle.center.x + outerHandle.size.x * 0.5f;
+            float topMinZ = topHandle.transform.localPosition.z +
+                topHandle.center.z - topHandle.size.z * 0.5f;
+            float bottomMaxZ = bottomHandle.transform.localPosition.z +
+                bottomHandle.center.z + bottomHandle.size.z * 0.5f;
+
+            Assert.Less(outerHandle.transform.localPosition.x, bodyCollider.center.x,
+                "Unity's imported YCB mug handle must remain on local -X.");
+            Assert.Greater(bodyMinX - outerMaxX, 0.005f,
+                "The mug body and outer handle collider leave no horizontal handle opening.");
+            Assert.Greater(topMinZ - bottomMaxZ, 0.015f,
+                "The top and bottom handle colliders leave no vertical handle opening.");
+
+            Vector3 holeCenterLocal = new Vector3(
+                (bodyMinX + outerMaxX) * 0.5f,
+                outerHandle.transform.localPosition.y,
+                (bottomMaxZ + topMinZ) * 0.5f);
+            Vector3 holeCenterWorld = mug.transform.TransformPoint(holeCenterLocal);
+            Physics.SyncTransforms();
+            for (int index = 0; index < colliders.Length; index++)
+            {
+                Vector3 closestPoint = colliders[index].ClosestPoint(holeCenterWorld);
+                Assert.Greater(
+                    (closestPoint - holeCenterWorld).sqrMagnitude,
+                    0.000001f,
+                    colliders[index].name + " fills the YCB mug handle opening.");
+            }
+        }
+
+        private static BoxCollider RequireHandleCollider(Transform mug, string childName)
+        {
+            Transform child = FindChildByName(mug, childName);
+            Assert.IsNotNull(child, "YCB_Mug is missing " + childName + ".");
+            Assert.IsNull(child.GetComponent<Rigidbody>(),
+                childName + " must share the mug root Rigidbody.");
+            Assert.IsNull(child.GetComponent<Renderer>(),
+                childName + " must remain an invisible collider helper.");
+
+            BoxCollider collider = child.GetComponent<BoxCollider>();
+            Assert.IsNotNull(collider, childName + " has no BoxCollider.");
+            return collider;
         }
 
         private static Transform FindChildByName(Transform root, string objectName)

@@ -10,10 +10,15 @@ namespace VRGloveDataCapture.RoboticsTasks
         {
             Box,
             Sphere,
-            CapsuleAlongModelZ
+            CapsuleAlongModelZ,
+            MugCompound
         }
 
         public const string LayoutRootName = "VRGlove_PickPlace_Tasks";
+        public const string MugObjectName = "YCB_Mug";
+        public const string MugHandleTopColliderName = "Mug_Handle_Collider_Top";
+        public const string MugHandleOuterColliderName = "Mug_Handle_Collider_Outer";
+        public const string MugHandleBottomColliderName = "Mug_Handle_Collider_Bottom";
 
         private const int Hi5ObjectLayer = 11;
         private const int Hi5PlaneLayer = 12;
@@ -85,7 +90,7 @@ namespace VRGloveDataCapture.RoboticsTasks
             controller.RegisterTarget(coasterZone);
             PickPlaceTaskObject mug = CreateYcbObject(
                 root.transform,
-                "YCB_Mug",
+                MugObjectName,
                 "RoboticsObjects/YCB/025_mug/textured",
                 "mug_to_coaster",
                 -1002,
@@ -93,7 +98,7 @@ namespace VRGloveDataCapture.RoboticsTasks
                 surfaceY,
                 0.117f,
                 0.24f,
-                TaskColliderShape.Box,
+                TaskColliderShape.MugCompound,
                 Quaternion.Euler(-90f, 0f, 0f),
                 controller,
                 bindToHi5Immediately);
@@ -279,6 +284,10 @@ namespace VRGloveDataCapture.RoboticsTasks
                 capsule.height = Mathf.Max(meshBounds.size.z * 0.96f, capsule.radius * 2f);
                 physicalCollider = capsule;
             }
+            else if (colliderShape == TaskColliderShape.MugCompound)
+            {
+                physicalCollider = AddMugCompoundColliders(root, meshBounds);
+            }
             else
             {
                 BoxCollider box = root.AddComponent<BoxCollider>();
@@ -313,6 +322,101 @@ namespace VRGloveDataCapture.RoboticsTasks
             }
 
             return taskObject;
+        }
+
+        /// <summary>
+        /// Adds the project-standard compound collider for the YCB 025 mug.
+        /// The imported model uses local Z as its vertical axis. Unity's OBJ
+        /// handedness conversion places the handle toward local -X even though
+        /// the source OBJ vertices extend toward +X. The body box stops before the
+        /// handle opening; three smaller boxes trace the handle around that
+        /// opening without filling it.
+        /// </summary>
+        /// <remarks>
+        /// The caller owns removal of obsolete colliders before invoking this
+        /// method on an existing object. Handle children never receive a
+        /// Rigidbody, so all four primitives belong to the mug root Rigidbody.
+        /// </remarks>
+        public static BoxCollider AddMugCompoundColliders(GameObject mugRoot, Bounds meshBounds)
+        {
+            if (mugRoot == null)
+            {
+                throw new System.ArgumentNullException("mugRoot");
+            }
+
+            // These normalized dimensions are intentionally tied to the YCB
+            // 025 mesh rather than its world scale. They therefore survive
+            // scene rebuilding and user-authored uniform scaling of the mug.
+            float bodyWidth = meshBounds.size.y * 0.88f;
+            float bodyHeight = meshBounds.size.z * 0.94f;
+            float bodyMaxX = meshBounds.max.x - meshBounds.size.x * 0.045f;
+            float bodyCenterX = bodyMaxX - bodyWidth * 0.5f;
+
+            BoxCollider body = mugRoot.AddComponent<BoxCollider>();
+            body.isTrigger = false;
+            body.center = new Vector3(
+                bodyCenterX,
+                meshBounds.center.y,
+                meshBounds.min.z + meshBounds.size.z * 0.49f);
+            body.size = new Vector3(bodyWidth, bodyWidth, bodyHeight);
+
+            float bodyMinX = body.center.x - body.size.x * 0.5f;
+            float outerWidth = meshBounds.size.x * 0.12f;
+            float handleMinX = meshBounds.min.x + meshBounds.size.x * 0.015f;
+            float outerCenterX = handleMinX + outerWidth * 0.5f;
+            float bridgeMinX = outerCenterX - outerWidth * 0.35f;
+            float bridgeMaxX = bodyMinX + meshBounds.size.x * 0.025f;
+            float bridgeWidth = bridgeMaxX - bridgeMinX;
+            float handleThickness = meshBounds.size.y * 0.32f;
+            float bridgeHeight = meshBounds.size.z * 0.15f;
+            float bottomCenterZ = meshBounds.min.z + meshBounds.size.z * 0.25f;
+            float topCenterZ = meshBounds.min.z + meshBounds.size.z * 0.75f;
+            float outerHeight = topCenterZ - bottomCenterZ;
+            float bridgeCenterX = (bridgeMinX + bridgeMaxX) * 0.5f;
+
+            AddMugHandleBox(
+                mugRoot,
+                MugHandleTopColliderName,
+                new Vector3(bridgeCenterX, meshBounds.center.y, topCenterZ),
+                new Vector3(bridgeWidth, handleThickness, bridgeHeight));
+            AddMugHandleBox(
+                mugRoot,
+                MugHandleOuterColliderName,
+                new Vector3(outerCenterX, meshBounds.center.y, meshBounds.center.z),
+                new Vector3(outerWidth, handleThickness, outerHeight));
+            AddMugHandleBox(
+                mugRoot,
+                MugHandleBottomColliderName,
+                new Vector3(bridgeCenterX, meshBounds.center.y, bottomCenterZ),
+                new Vector3(bridgeWidth, handleThickness, bridgeHeight));
+
+            return body;
+        }
+
+        private static BoxCollider AddMugHandleBox(
+            GameObject mugRoot,
+            string childName,
+            Vector3 localCenter,
+            Vector3 localSize)
+        {
+            Transform child = mugRoot.transform.Find(childName);
+            if (child == null)
+            {
+                GameObject childObject = new GameObject(childName);
+                child = childObject.transform;
+                child.SetParent(mugRoot.transform, false);
+            }
+
+            child.localPosition = localCenter;
+            child.localRotation = Quaternion.identity;
+            child.localScale = Vector3.one;
+            child.gameObject.layer = mugRoot.layer;
+
+            BoxCollider collider = child.gameObject.AddComponent<BoxCollider>();
+            collider.isTrigger = false;
+            collider.center = Vector3.zero;
+            collider.size = localSize;
+            return collider;
         }
 
         private static void CreateWorktable(
