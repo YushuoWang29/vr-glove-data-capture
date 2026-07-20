@@ -51,6 +51,9 @@ namespace VRGloveDataCapture.MixedReality
         private float opacity = 1.0f;
 
         [SerializeField]
+        // Valve's frameBounds V sign corrects texture orientation only; it must
+        // never exchange the logical eye regions. Keep this false for the VIVE
+        // Pro 2. It remains an explicit diagnostic override for unusual drivers.
         private bool swapStereoEyes;
 
         [SerializeField]
@@ -97,7 +100,7 @@ namespace VRGloveDataCapture.MixedReality
         private int detectedCameraCount = 1;
         private StereoFrameLayout detectedLayout = StereoFrameLayout.Mono;
         private Vector4 currentUvTransform = new Vector4(1.0f, -1.0f, 0.0f, 1.0f);
-        private bool singlePassInstancedBackground;
+        private bool stereoDrawModeSupported;
         private bool hasConfiguredStereoMode;
         private XRSettings.StereoRenderingMode configuredStereoMode;
         private string stereoDrawMode = "Pending XR initialization";
@@ -147,6 +150,11 @@ namespace VRGloveDataCapture.MixedReality
         public string CurrentStereoDrawMode
         {
             get { return stereoDrawMode; }
+        }
+
+        public string CurrentStereoEyeMapping
+        {
+            get { return swapStereoEyes ? "DiagnosticSwap" : "Direct"; }
         }
 
         private void Awake()
@@ -250,6 +258,15 @@ namespace VRGloveDataCapture.MixedReality
                 perEyeOrientation == PerEyeOrientation.Rotate180 ? 1.0f : 0.0f);
             UpdateTextureBounds();
             RefreshBackgroundCommandsForCurrentStereoMode();
+            if (!stereoDrawModeSupported)
+            {
+                RemoveBackgroundCommands();
+                RestoreCamera();
+                SetState(PassthroughState.Error,
+                    "Unsupported XR stereo mode " + XRSettings.stereoRenderingMode +
+                    ". Unity 2019.4.18f1 passthrough requires OpenVR Multi Pass.");
+                return;
+            }
             ApplyCameraOverride();
             InstallBackgroundCommands();
 
@@ -262,6 +279,7 @@ namespace VRGloveDataCapture.MixedReality
                     "LIVE: " + detectedCameraCount + " camera(s), " + detectedLayout +
                     ", texture " + texture.width + "x" + texture.height +
                     ", per-eye " + perEyeOrientation +
+                    ", eye map " + CurrentStereoEyeMapping +
                     ", UV " + FormatUvTransform(currentUvTransform) +
                     ", XR draw " + stereoDrawMode +
                     ", " + SystemInfo.graphicsDeviceType + ".");
@@ -470,17 +488,16 @@ namespace VRGloveDataCapture.MixedReality
         }
 
         /// <summary>
-        /// CPU reference for the shader's stereo-region mapping. OpenVR vertical
-        /// frames are top/bottom = left/right; a negative frame-bounds scale
-        /// reverses the packed-region index after Unity's texture flip.
+        /// CPU reference for the shader's stereo-region mapping. Eye ownership
+        /// is independent of Valve's later frameBounds transform: its negative V
+        /// scale fixes Unity texture orientation and must not exchange cameras.
         /// </summary>
         public static Vector2 CalculateStereoLayoutUv(
             Vector2 localUv,
             int renderEyeIndex,
             StereoFrameLayout layout,
             bool swapEyes,
-            PerEyeOrientation orientation,
-            Vector2 baseUvScale)
+            PerEyeOrientation orientation)
         {
             float cameraEye = renderEyeIndex > 0 ? 1.0f : 0.0f;
             if (swapEyes)
@@ -493,13 +510,11 @@ namespace VRGloveDataCapture.MixedReality
                 : localUv;
             if (layout == StereoFrameLayout.VerticalStereo)
             {
-                float region = baseUvScale.y < 0.0f ? 1.0f - cameraEye : cameraEye;
-                orientedUv.y = orientedUv.y * 0.5f + region * 0.5f;
+                orientedUv.y = orientedUv.y * 0.5f + cameraEye * 0.5f;
             }
             else if (layout == StereoFrameLayout.HorizontalStereo)
             {
-                float region = baseUvScale.x < 0.0f ? 1.0f - cameraEye : cameraEye;
-                orientedUv.x = orientedUv.x * 0.5f + region * 0.5f;
+                orientedUv.x = orientedUv.x * 0.5f + cameraEye * 0.5f;
             }
 
             return orientedUv;
@@ -536,8 +551,7 @@ namespace VRGloveDataCapture.MixedReality
                 renderEyeIndex,
                 layout,
                 swapEyes,
-                orientation,
-                new Vector2(frameBoundsTransform.x, frameBoundsTransform.y));
+                orientation);
             return new Vector2(
                 layoutUv.x * frameBoundsTransform.x + frameBoundsTransform.z,
                 layoutUv.y * frameBoundsTransform.y + frameBoundsTransform.w);
@@ -552,9 +566,11 @@ namespace VRGloveDataCapture.MixedReality
         }
 
         /// <summary>
-        /// Unity 2019's CommandBuffer.DrawMesh defaults to one instance and one
-        /// texture-array slice. Single Pass Instanced therefore needs both the
-        /// complete CameraTarget array and two draw instances explicitly.
+        /// Unity 2019.4.18f1 cannot safely combine this CommandBuffer background
+        /// with Single Pass Instanced. Issue 1301011 requires binding all array
+        /// slices, while Issue 1261545 makes that SetRenderTarget path render the
+        /// two eyes differently until 2019.4.21f1. This project therefore uses
+        /// the reference Multi Pass path and blocks an accidental SPI override.
         /// </summary>
         private void RefreshBackgroundCommandsForCurrentStereoMode()
         {
@@ -592,18 +608,14 @@ namespace VRGloveDataCapture.MixedReality
             backgroundCommands.Clear();
             configuredStereoMode = mode;
             hasConfiguredStereoMode = true;
-            singlePassInstancedBackground = RequiresInstancedStereoDraw(mode);
-            stereoDrawMode = mode.ToString() +
-                (singlePassInstancedBackground ? " x2/all-slices" : " x1");
+            stereoDrawModeSupported = IsSupportedStereoMode(mode);
+            stereoDrawMode = stereoDrawModeSupported
+                ? "MultiPass per-eye"
+                : mode + " blocked (requires OpenVR MultiPass)";
 
-            if (singlePassInstancedBackground)
+            if (!stereoDrawModeSupported)
             {
-                backgroundCommands.SetRenderTarget(
-                    BuiltinRenderTextureType.CameraTarget,
-                    0,
-                    CubemapFace.Unknown,
-                    -1);
-                backgroundCommands.SetInstanceMultiplier(2);
+                return;
             }
 
             backgroundCommands.DrawMesh(
@@ -612,17 +624,11 @@ namespace VRGloveDataCapture.MixedReality
                 backgroundMaterial,
                 0,
                 0);
-
-            if (singlePassInstancedBackground)
-            {
-                // Do not leak the stereo multiplier into commands appended later.
-                backgroundCommands.SetInstanceMultiplier(1);
-            }
         }
 
-        public static bool RequiresInstancedStereoDraw(XRSettings.StereoRenderingMode mode)
+        public static bool IsSupportedStereoMode(XRSettings.StereoRenderingMode mode)
         {
-            return mode == XRSettings.StereoRenderingMode.SinglePassInstanced;
+            return mode == XRSettings.StereoRenderingMode.MultiPass;
         }
 
         private void ApplyCameraOverride()

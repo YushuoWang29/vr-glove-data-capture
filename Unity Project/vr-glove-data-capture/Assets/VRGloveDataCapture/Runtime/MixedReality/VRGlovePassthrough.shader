@@ -85,23 +85,14 @@ Shader "Hidden/VRGloveDataCapture/PassthroughBackground"
                     step(0.5, _RotateEachEye180));
                 if (_CameraFrameLayout > 0.5 && _CameraFrameLayout < 1.5)
                 {
-                    // OpenVR VerticalLayout is top/bottom = left/right. Valve's
-                    // Unity wrapper normally supplies a negative V scale, so the
-                    // packed region must be reversed to preserve left/right.
-                    float regionEye = lerp(
-                        cameraEye,
-                        1.0 - cameraEye,
-                        step(_CameraUvTransform.y, -0.000001));
-                    layoutUv.y = layoutUv.y * 0.5 + regionEye * 0.5;
+                    // Select the logical eye first. Valve's frameBounds transform
+                    // is applied below only to correct/crop the external texture;
+                    // a negative V scale must not exchange eye ownership.
+                    layoutUv.y = layoutUv.y * 0.5 + cameraEye * 0.5;
                 }
                 else if (_CameraFrameLayout >= 1.5)
                 {
-                    // OpenVR HorizontalLayout is left/right.
-                    float regionEye = lerp(
-                        cameraEye,
-                        1.0 - cameraEye,
-                        step(_CameraUvTransform.x, -0.000001));
-                    layoutUv.x = layoutUv.x * 0.5 + regionEye * 0.5;
+                    layoutUv.x = layoutUv.x * 0.5 + cameraEye * 0.5;
                 }
 
                 float2 cameraUv =

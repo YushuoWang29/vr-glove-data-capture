@@ -17,7 +17,7 @@
 - 在厂商解算结果上开放手指 **外展/内收（abduction/adduction）**，改善拇指与小指对指能力。
 - 支持可选的 **PIP–DIP 比例耦合**，在传感器数量有限时获得更稳定的指尖姿态。
 - 提供 **手–物体自然交互**：自由空间保持手套姿态，接触后只截停将要穿入刚体的可视指骨；任务物体增加 Pinch2 自适应松手、短时抓取手碰撞隔离和滤波抛掷速度，源骨骼、校准与采集数据保持不变。
-- 使用 VIVE Pro 2 前置双摄像头实现实验性的 **stereo video see-through**：按 XR 目标投影、逐眼区域和 Valve frame bounds 三个独立阶段处理 UV；支持本机 Multi Pass 与 Unity 2019 Single Pass Instanced 双眼绘制，避免上下倒置、一眼双画面、右眼漏画或左右相机交叉；`O` 只用于逐眼朝向诊断。
+- 使用 VIVE Pro 2 前置双摄像头实现实验性的 **stereo video see-through**：左右眼区选择与 Valve 负 V 纹理翻转完全解耦；项目固定使用 Multi Pass 规避 Unity 2019.4.18f1 的 SPI CommandBuffer 双眼缺陷，避免上下倒置、左右相机交叉、虚拟场景单眼双绘或右眼漏画；`O` 只用于逐眼朝向诊断。
 - 使用 Unity Recorder 在 Editor Play Mode 中录制 **VR 第一视角 MP4**。
 - 提供可在 **Scene View 直接编辑**的机器人操作任务场景，包括带实体碰撞桌面的球入桶、杯放定位垫、罐入箱和颜色分类；原厂示例家具也可在本地 `TableScene_Vive` 中直接调整并保存。
 - 将新增任务接入 Hi5 原场景的统一复位消息和实体复位按钮。
@@ -105,7 +105,7 @@ flowchart LR
 | **Hi5 手指外展/内收解锁** | Play Mode 自动启用 | 关闭厂商 `finger ADB fixed`，保留手指横向自由度 | [FINGER_KINEMATICS.md](docs/FINGER_KINEMATICS.md) |
 | **PIP–DIP 耦合** | 可选，需要在手骨骼根节点配置组件 | 按比例约束 DIP 屈伸，同时保留其他旋转分量 | [FINGER_KINEMATICS.md](docs/FINGER_KINEMATICS.md) |
 | **手–物体自然交互** | Play Mode 自动安装，无需修改 Hi5 prefab | 可视指骨表面贴合；Pinch2 自适应松手；短时碰撞隔离；滤波抛掷速度；不改校准和采集源 | [HAND_OBJECT_CONTACT.md](docs/HAND_OBJECT_CONTACT.md) |
-| **VIVE 双目视频透视** | Play Mode 按 `P` 开关；`O` 仅切换各眼内部 180° 朝向 | 拆分 OpenVR `VerticalStereo` 纹理并结合 UV 翻转选择正确相机，虚拟物体按 Unity 深度绘制在前方 | [MIXED_REALITY.md](docs/MIXED_REALITY.md) |
+| **VIVE 双目视频透视** | Play Mode 按 `P` 开关；`O` 仅切换各眼内部 180° 朝向 | Direct 拆分 OpenVR `VerticalStereo` 左右眼区，Multi Pass 逐眼合成，虚拟物体按 Unity 深度绘制在前方 | [MIXED_REALITY.md](docs/MIXED_REALITY.md) |
 | **VR 第一视角录像** | Editor Play Mode 按 `F9` 开始/停止 | `Recordings/vr_view_*.mp4` | [VR_VIEW_RECORDING.md](docs/VR_VIEW_RECORDING.md) |
 | **统一实验数据采集** | `Capture Control` 配置；Play Mode 按 `F12` 启停 trial、`F11` 标记 | `Captures/participants/<ID>/sessions/...` 下的 CSV、事件、manifest、校验和与同步 MP4 | [DATA_CAPTURE.md](docs/DATA_CAPTURE.md) |
 | **机器人抓取任务台** | 打开项目自有 `PickPlaceTasks` 场景，可在 Scene View 编辑 | 独立实体工作桌、5 个可抓物体、5 个目标区及任务完成反馈 | [PICK_PLACE_TASKS.md](docs/PICK_PLACE_TASKS.md) |
@@ -377,7 +377,7 @@ AdaptiveHandContactSmokeTests.SolverAutoInstallsOnBothVisibleHandsWithoutWriting
 GazeControlPanelSmokeTests.PanelPreservesCalibrationAndRoutesVendorGazeToProjectControls
 ```
 
-该测试验证每次 Play 都能建立有效的运行时面板、原厂校准对象不被删除、`Reconnect` 与 `Interaction` 分居独立槽位且碰撞体不重叠、P-pose 权威完成回调可解锁六个注视控件、原厂手势把菜单切到 `Exit` 后功能面板仍可见、驻留完成可调用透视控制、Single Pass Instanced 采用双实例/全眼切片绘制，以及 VIVE Pro 2 `VerticalStereo` 路径按 **XR 目标投影 → 逐眼区域 → Valve frameBounds** 的次序完成上下方向和双眼隔离修正。按 **`Ctrl+Shift+F10`**（Edit Mode）或执行 `Tools > VR Glove Data Capture > Run All Project Play Mode Tests` 可以一次运行注视面板、手–物体接触、pick-and-place 复位和统一采集四项测试。
+该测试验证每次 Play 都能建立有效的运行时面板、原厂校准对象不被删除、`Reconnect` 与 `Interaction` 分居独立槽位且碰撞体不重叠、P-pose 权威完成回调可解锁六个注视控件、原厂手势把菜单切到 `Exit` 后功能面板仍可见、驻留完成可调用透视控制、Unity 2019.4.18f1 固定使用 Multi Pass 且阻止误入 SPI，以及 VIVE Pro 2 左右眼区与负 V 纹理翻转保持独立。按 **`Ctrl+Shift+F10`**（Edit Mode）或执行 `Tools > VR Glove Data Capture > Run All Project Play Mode Tests` 可以一次运行注视面板、手–物体接触、pick-and-place 复位和统一采集四项测试。
 
 统一采集的端到端测试为：
 
@@ -403,7 +403,7 @@ UnifiedCaptureSmokeTests.TrialFinalizesAtomicMachineReadableStreamsAndManifest
 
 ### 按 `P` 后没有真实世界画面
 
-检查 SteamVR 的 Camera 权限并重启 SteamVR。`Passthrough is ready` 只表示组件安装完成，只有 `Passthrough Streaming: LIVE` 才表示收到了连续图像。VIVE Pro 2 的正常日志还应包含 `2 camera(s), VerticalStereo`、`per-eye Normal`、实际 UV 变换，以及当前项目配置对应的 **`XR draw SinglePassInstanced x2/all-slices`**；该值必须与 OpenVR 初始化日志一致。左右眼应各显示同侧相机的一个直立现实背景，而不是左眼显示上下两幅图、右眼仍为纯虚拟场景。`O` 仅用于临时诊断每眼内部朝向，不能修复双眼接缝、相机内外参或深度视差，正常验收必须回到 `per-eye Normal`。完整技术依据与实机检查表见 [MIXED_REALITY.md](docs/MIXED_REALITY.md)。
+检查 SteamVR 的 Camera 权限并重启 SteamVR。`Passthrough is ready` 只表示组件安装完成，只有 `Passthrough Streaming: LIVE` 才表示收到了连续图像。当前 VIVE Pro 2 的正常日志应同时包含 **`eye map Direct`** 与 **`XR draw MultiPass per-eye`**，并与 OpenVR 初始化模式一致。左右眼应各显示同侧相机的一个直立现实背景，虚拟场景也必须在两眼各出现一次。若日志仍包含 `SinglePassInstanced`、`x2` 或 `all-slices`，说明 Unity 尚未重新载入最新 OpenVR 设置；彻底退出 Play Mode并重启 Unity Editor/SteamVR。`O` 仅用于逐眼朝向诊断，不能修复相机内外参或深度视差。完整技术依据与实机检查表见 [MIXED_REALITY.md](docs/MIXED_REALITY.md)。
 
 ### 点击 Play 三角退出时 Unity Editor 整体崩溃
 
